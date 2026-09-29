@@ -1100,64 +1100,212 @@ def vmess_copy_markup(url):
         return InlineKeyboardMarkup([[CPY("SALIN KODE",url)]])
     return None
 
-async def send_copy_rich(chat, title, url):
-    """Send config as one Telegram Rich Message with the copy button INSIDE it.
+def xray_rich_data(proto, un, pw, cred, exp, days, sk, is_trial=False):
+    """Return plain account lines plus URL titles/URLs for one Rich Message bubble."""
+    s = SERVERS.get(sk,{})
+    host = s.get("domain") or SSH_HOST
+    city = s.get("city","Singapore")
+    isp = s.get("isp","DigitalOcean LLC")
+    ssh_ovpn = s.get("ssh_ovpn") or s.get("name","SG NEWMEDIA")
+    quota = s.get("quota_gb",700) or 700
+    ip_limit = s.get("ip_limit",1) or 1
+    bulan = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"]
+    try:
+        ed = datetime.strptime(exp,"%Y-%m-%d")
+        ef = f"{ed.day} {bulan[ed.month-1]}, {ed.year}"
+    except:
+        ef = exp
+    cr = datetime.now()
+    cf = f"{cr.day} {bulan[cr.month-1]}, {cr.year}"
+    head = {"vmess":"VMESS","vless":"VLESS","trojan":"TROJAN"}.get(proto,proto.upper())
+    lbl = "TRIAL" if is_trial else "PREMIUM"
 
-    Bot API 10.3 introduced RichMessageButton/InputRichBlockButtons.  Unlike an
-    InlineKeyboardMarkup, this button is rendered as part of the rich-message
-    bubble itself, which matches the reference layout.
+    lines = [
+        f"◤ {head} ACCOUNT ◢",
+        f"     ❖ {lbl} ❖",
+        "━━━━━━━━━━━━━━━━━━━━━━━",
+        "",
+        f"City       : {city}",
+        f"ISP        : {isp}",
+        f"SSH OVPN   : {ssh_ovpn}",
+        f"Username   : {un}",
+    ]
+    if proto == "trojan":
+        lines.append(f"Password   : {cred}")
+    else:
+        lines += [f"Password   : {pw}", f"UUID       : {cred}"]
+    lines += [
+        f"Qouta      : {quota} GB",
+        f"Limit IP   : {ip_limit} IP",
+        "",
+        "",
+        "━━━━━━━━━━━━━━━━━━━━━━━",
+        "",
+    ]
+
+    if proto == "vmess":
+        lines += [
+            f"Host       : {host}",
+            "Path       : /vmess",
+            "Path gRPC  : vmess-grpc",
+            "WS TLS     : 443",
+            f"WS         : {XRAY_PORTS['vmess_ws']}",
+            "gRPC TLS   : 443",
+            f"gRPC       : {XRAY_PORTS['vmess_grpc']}",
+        ]
+        urls = [("── VMESS WS TLS ──", vmess_copy_messages(sk,cred)[0][1]),
+                ("── VMESS WS ──", vmess_copy_messages(sk,cred)[1][1]),
+                ("── VMESS gRPC TLS ──", vmess_copy_messages(sk,cred)[2][1])]
+    elif proto == "vless":
+        lines += [
+            f"Host       : {host}",
+            "Path       : /vless",
+            "Path gRPC  : vless-grpc",
+            "WS TLS     : 443",
+            f"WS         : {XRAY_PORTS['vless_ws']}",
+            "gRPC TLS   : 443",
+            "TCP TLS    : 443",
+        ]
+        urls = [
+            ("── VLESS WS TLS ──", xray_build_vless(host,443,cred,'/vless',True,f'{ssh_ovpn}-WSTLS')),
+            ("── VLESS WS ──", xray_build_vless(host,XRAY_PORTS['vless_ws'],cred,'/vless',False,f'{ssh_ovpn}-WS')),
+            ("── VLESS gRPC TLS ──", xray_build_vless_grpc(host,cred,'vless-grpc',f'{ssh_ovpn}-gRPC')),
+        ]
+    else:
+        lines += [
+            f"Host       : {host}",
+            f"Trojan TCP : {XRAY_PORTS['trojan_tcp']}",
+            "Trojan WS  : 443 /trojan",
+            "Trojan gRPC: 443 trojan-grpc",
+        ]
+        urls = [
+            ("── TROJAN TCP ──", xray_build_trojan(host,XRAY_PORTS['trojan_tcp'],cred,'',True,f'{ssh_ovpn}-TCP')),
+            ("── TROJAN WS TLS ──", xray_build_trojan(host,443,cred,'/trojan',True,f'{ssh_ovpn}-WS')),
+            ("── TROJAN gRPC TLS ──", xray_build_trojan_grpc(host,cred,'trojan-grpc',f'{ssh_ovpn}-gRPC')),
+        ]
+
+    durasi = f"{TRIAL_DURATION_MIN} Menit" if is_trial else f"{days} Hari"
+    footer = [
+        "━━━━━━━━━━━━━━━━━━━━━━━",
+        "",
+        f"Durasi     : {durasi}",
+        f"Dibuat     : {cf}",
+        f"Berakhir   : {ef}",
+        "",
+        "━━━━━━━━━━━━━━━━━━━━━━━",
+        "      ◤ SANSXML VPN STORE ◢",
+        "❖ Terima kasih ❖",
+    ]
+    return lines, urls, footer
+
+async def send_xray_rich(chat, proto, un, pw, cred, exp, days, sk, is_trial=False):
+    """Send the COMPLETE XRay account as ONE Telegram Rich Message bubble.
+
+    No blockquote/quote wrapper is used. URL titles, URL code blocks, copy buttons,
+    duration and footer all live inside the same bubble.
     """
+    lines, urls, footer = xray_rich_data(proto,un,pw,cred,exp,days,sk,is_trial)
+
+    blocks = []
+    # Account/header/host information: plain paragraphs, not a quote block.
+    blocks.append({"type":"paragraph","text":"\n".join(lines)})
+    blocks.append({"type":"paragraph","text":"URL CONFIGURATION"})
+
+    for title, url in urls:
+        blocks.append({"type":"paragraph","text":title})
+        blocks.append({"type":"pre","text":str(url)})
+        if 1 <= len(str(url)) <= 256:
+            blocks.append({
+                "type":"buttons",
+                "align":"center",
+                "buttons":[{
+                    "text":"SALIN KODE",
+                    "copy_text":{"text":str(url)}
+                }]
+            })
+
+    blocks.append({"type":"paragraph","text":"\n".join(footer)})
+
     def _send():
         import urllib.request, json as _json
         payload = {
             "chat_id": chat.id,
             "rich_message": {
-                "blocks": [{
-                    "type": "blockquote",
-                    "blocks": [
-                        {"type": "paragraph", "text": str(title)},
-                        {"type": "pre", "text": str(url)},
-                        {
-                            "type": "buttons",
-                            "align": "center",
-                            "buttons": [{
-                                "text": "SALIN KODE",
-                                "copy_text": {"text": str(url)}
-                            }]
-                        }
-                    ]
-                }],
+                "blocks": blocks,
                 "skip_entity_detection": True
             }
         }
         req = urllib.request.Request(
             f"https://api.telegram.org/bot{BOT_TOKEN}/sendRichMessage",
-            data=_json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            data=_json.dumps(payload,ensure_ascii=False).encode("utf-8"),
             headers={"Content-Type":"application/json"},
             method="POST"
         )
-        with urllib.request.urlopen(req, timeout=30) as r:
+        with urllib.request.urlopen(req,timeout=30) as r:
             return _json.loads(r.read().decode("utf-8"))
+
     try:
         result = await asyncio.to_thread(_send)
         if result.get("ok"):
             return True
-        # Keep the API error for server logs without exposing the bot token.
-        print("sendRichMessage failed:", result.get("description", "unknown error"))
+        print("sendRichMessage failed:",result.get("description","unknown error"))
     except Exception as e:
-        print("sendRichMessage exception:", e)
+        print("sendRichMessage exception:",e)
 
-    # Compatibility fallback for older Bot API installations.
-    # This is only used if Rich Messages are unavailable; on Bot API 10.3+
-    # the normal path above keeps the copy button inside the same bubble.
+    # Fallback: still keep the COMPLETE account in ONE normal Telegram bubble,
+    # and do not wrap it in a quote/block. Only the copy buttons move outside
+    # the bubble when Rich Messages are unavailable.
+    try:
+        def esc_html(t):
+            return str(t).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+        parts = [esc_html("\n".join(lines)), "", esc_html("URL CONFIGURATION")]
+        rows = []
+        for title, url in urls:
+            parts += [esc_html(title), f"<pre>{esc_html(url)}</pre>", ""]
+            if 1 <= len(str(url)) <= 256:
+                rows.append([CPY("SALIN KODE",str(url))])
+        parts.append(esc_html("\n".join(footer)))
+        await chat.send_message("\n".join(parts),
+            reply_markup=InlineKeyboardMarkup(rows) if rows else None,parse_mode="HTML")
+    except Exception as e:
+        print("xray rich fallback failed:",e)
+    return False
+
+async def send_copy_rich(chat, title, url):
+    """Send one standalone Rich Message config block (legacy/fallback helper)."""
+    def _send():
+        import urllib.request, json as _json
+        payload = {
+            "chat_id": chat.id,
+            "rich_message": {
+                "blocks":[
+                    {"type":"paragraph","text":str(title)},
+                    {"type":"pre","text":str(url)},
+                    {"type":"buttons","align":"center","buttons":[{
+                        "text":"SALIN KODE","copy_text":{"text":str(url)}
+                    }]}
+                ],
+                "skip_entity_detection":True
+            }
+        }
+        req = urllib.request.Request(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/sendRichMessage",
+            data=_json.dumps(payload,ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type":"application/json"},method="POST")
+        with urllib.request.urlopen(req,timeout=30) as r:
+            return _json.loads(r.read().decode("utf-8"))
+    try:
+        result = await asyncio.to_thread(_send)
+        if result.get("ok"): return True
+        print("sendRichMessage failed:",result.get("description","unknown error"))
+    except Exception as e:
+        print("sendRichMessage exception:",e)
     try:
         await chat.send_message(
-            f"<blockquote><b>{title}</b>\n<pre>{str(url).replace('&','&amp;').replace('<','&lt;').replace('>','&gt;')}</pre></blockquote>",
-            reply_markup=vmess_copy_markup(url),
-            parse_mode="HTML"
-        )
+            f"<b>{title}</b>\n<pre>{str(url).replace('&','&amp;').replace('<','&lt;').replace('>','&gt;')}</pre>",
+            reply_markup=vmess_copy_markup(url),parse_mode="HTML")
     except Exception as e:
-        print("copy fallback failed:", e)
+        print("copy fallback failed:",e)
     return False
 
 
@@ -1246,17 +1394,14 @@ async def do_create_xray(chat, uid, user, un, pw, hari, sk, proto, is_trial=Fals
     save_json(ACCOUNTS_FILE,accs)
     if not is_trial:
         add_trx(uid,user.first_name or "User",user.username or "",f"{proto}_akun",price,f"{hari}h {s.get('name','')}")
-    if proto == "vmess":
-        # Main account information first, then one copy button per URL
-        # so the result matches the separate copy blocks shown in the reference.
-        await m.edit_text(
-            xray_caption(proto,un,pw,cred,exp,(hari if not is_trial else TRIAL_DURATION_MIN),sk,is_trial=is_trial,include_urls=False),
-            parse_mode="HTML"
-        )
-        for title, url in vmess_copy_messages(sk, cred):
-            await send_vmess_rich(chat, title, url)
-    else:
-        await m.edit_text(xray_caption(proto,un,pw,cred,exp,hari,sk,is_trial=is_trial),parse_mode="HTML")
+    # Send the complete XRay account as ONE bubble.  The Rich Message contains
+    # the account details, URL CONFIGURATION, all three URLs, copy buttons,
+    # duration and footer in the same message bubble.
+    try:
+        await m.delete()
+    except:
+        pass
+    await send_xray_rich(chat,proto,un,pw,cred,exp,(hari if not is_trial else TRIAL_DURATION_MIN),sk,is_trial=is_trial)
     asyncio.create_task(sync_push_async())
 async def _del_acc(uid, un, user, chat):
     a = get_acc(un)
