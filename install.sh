@@ -1212,10 +1212,14 @@ async def send_xray_rich(chat, proto, un, pw, cred, exp, days, sk, is_trial=Fals
     blocks.append({"type":"paragraph","text":"URL CONFIGURATION"})
 
     for title, url in urls:
+        # Match the reference layout: the URL title stays OUTSIDE the card,
+        # while the URL and its SALIN KODE button are stacked inside one
+        # compact block.  This keeps all three configs in the same bubble
+        # without making the whole message look like one giant quote.
         blocks.append({"type":"paragraph","text":title})
-        blocks.append({"type":"pre","text":str(url)})
+        inner = [{"type":"pre","text":str(url)}]
         if 1 <= len(str(url)) <= 256:
-            blocks.append({
+            inner.append({
                 "type":"buttons",
                 "align":"center",
                 "buttons":[{
@@ -1223,6 +1227,7 @@ async def send_xray_rich(chat, proto, un, pw, cred, exp, days, sk, is_trial=Fals
                     "copy_text":{"text":str(url)}
                 }]
             })
+        blocks.append({"type":"blockquote","blocks":inner})
 
     blocks.append({"type":"paragraph","text":"\n".join(footer)})
 
