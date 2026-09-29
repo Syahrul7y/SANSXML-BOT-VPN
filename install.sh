@@ -1099,6 +1099,49 @@ def vmess_copy_markup(url):
         return InlineKeyboardMarkup([[CPY("📋 SALIN KODE",url)]])
     return None
 
+async def send_vmess_rich(chat, title, url):
+    """Send VMESS as a Telegram Rich Message so SALIN KODE is inside the block."""
+    safe_url = esc(url)
+    safe_title = esc(title)
+    # Rich Messages (Bot API 10.1+) allow the copy button to be rendered
+    # inside the same message/block, matching the reference UI.
+    html = (
+        f"<p><b>{safe_title}</b></p>"
+        f"<blockquote><pre>{safe_url}</pre>"
+        f"<tg-button-row align=\"center\"><tg-button type=\"copy_text\" "
+        f"text=\"{safe_url}\">SALIN KODE</tg-button></tg-button-row></blockquote>"
+    )
+    payload = {
+        "chat_id": chat.id,
+        "rich_message": {"html": html}
+    }
+    def _send():
+        import urllib.request, json as _json
+        req = urllib.request.Request(
+            f"https://api.telegram.org/bot{BOT_TOKEN}/sendRichMessage",
+            data=_json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type":"application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=30) as r:
+            return _json.loads(r.read().decode("utf-8"))
+    try:
+        result = await asyncio.to_thread(_send)
+        if result.get("ok"):
+            return True
+    except Exception:
+        pass
+    # Fallback for clients/API installations where Rich Messages are unavailable.
+    try:
+        await chat.send_message(
+            f"<blockquote><b>{safe_title}</b>\n<pre>{safe_url}</pre></blockquote>",
+            reply_markup=vmess_copy_markup(url),
+            parse_mode="HTML"
+        )
+        return False
+    except Exception:
+        return False
+
 
 # ACTIONS
 async def do_create(chat, uid, user, un, pw, hari, is_trial=False, sk="sg_1ip"):
@@ -1177,13 +1220,7 @@ async def do_create_xray(chat, uid, user, un, pw, hari, sk, proto):
             parse_mode="HTML"
         )
         for title, url in vmess_copy_messages(sk, cred):
-            safe_url = url.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
-            markup = vmess_copy_markup(url)
-            await chat.send_message(
-                f"<blockquote><b>{title}</b>\n<pre>{safe_url}</pre></blockquote>",
-                reply_markup=markup,
-                parse_mode="HTML"
-            )
+            await send_vmess_rich(chat, title, url)
     else:
         await m.edit_text(xray_caption(proto,un,pw,cred,exp,hari,sk),parse_mode="HTML")
     asyncio.create_task(sync_push_async())
@@ -1824,15 +1861,7 @@ async def cb(u,c):
         except: pass
         if proto == "vmess":
             for title, url in vmess_copy_messages(xsk, xcred):
-                safe_url = url.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
-                markup = vmess_copy_markup(url)
-                try:
-                    await chat.send_message(
-                        f"<blockquote><b>{title}</b>\n<pre>{safe_url}</pre></blockquote>",
-                        reply_markup=markup,
-                        parse_mode="HTML"
-                    )
-                except: pass
+                await send_vmess_rich(chat, title, url)
         return
     if d.startswith("del_acc|"):
         un = d.split("|",1)[1]
