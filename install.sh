@@ -1092,7 +1092,7 @@ def vmess_copy_messages(sk, cred):
     url_tls = xray_build_vmess(host,443,cred,'/vmess',True,f'{ssh_ovpn}-WSTLS')
     url_http = xray_build_vmess(host,XRAY_PORTS['vmess_ws'],cred,'/vmess',False,f'{ssh_ovpn}-WS')
     url_grpc = xray_build_vmess_grpc(host,cred,'vmess-grpc',f'{ssh_ovpn}-gRPC')
-    return [("◌URL TLS:",url_tls),("◌URL HTTP:",url_http),("◌URL gRPC:",url_grpc)]
+    return [("URL TLS:",url_tls),("URL HTTP:",url_http),("URL gRPC:",url_grpc)]
 
 def vmess_copy_markup(url):
     # Telegram CopyTextButton accepts 1-256 characters.
@@ -1101,26 +1101,35 @@ def vmess_copy_markup(url):
     return None
 
 async def send_copy_rich(chat, title, url):
-    """Send one config URL as a single Telegram Rich Message with copy control."""
-    def esc(v): return str(v).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace('"',"&quot;")
-    safe_url = esc(url)
-    safe_title = esc(title)
-    # Rich Messages (Bot API 10.1+) allow the copy button to be rendered
-    # inside the same message/block, matching the reference UI.
-    # Keep title, URL and copy control in one Rich Message body.
-    # Using one block instead of separate <p>/<blockquote> elements prevents
-    # Telegram clients from rendering the title and URL as two message blocks.
-    html = (
-        f"<blockquote><b>{safe_title}</b>\n<pre>{safe_url}</pre>"
-        f"<tg-button-row align=\"center\"><tg-button type=\"copy_text\" "
-        f"text=\"{safe_url}\">SALIN KODE</tg-button></tg-button-row></blockquote>"
-    )
-    payload = {
-        "chat_id": chat.id,
-        "rich_message": {"html": html}
-    }
+    """Send config as one Telegram Rich Message with the copy button INSIDE it.
+
+    Bot API 10.3 introduced RichMessageButton/InputRichBlockButtons.  Unlike an
+    InlineKeyboardMarkup, this button is rendered as part of the rich-message
+    bubble itself, which matches the reference layout.
+    """
     def _send():
         import urllib.request, json as _json
+        payload = {
+            "chat_id": chat.id,
+            "rich_message": {
+                "blocks": [{
+                    "type": "blockquote",
+                    "blocks": [
+                        {"type": "paragraph", "text": str(title)},
+                        {"type": "pre", "text": str(url)},
+                        {
+                            "type": "buttons",
+                            "align": "center",
+                            "buttons": [{
+                                "text": "SALIN KODE",
+                                "copy_text": {"text": str(url)}
+                            }]
+                        }
+                    ]
+                }],
+                "skip_entity_detection": True
+            }
+        }
         req = urllib.request.Request(
             f"https://api.telegram.org/bot{BOT_TOKEN}/sendRichMessage",
             data=_json.dumps(payload, ensure_ascii=False).encode("utf-8"),
@@ -1133,18 +1142,23 @@ async def send_copy_rich(chat, title, url):
         result = await asyncio.to_thread(_send)
         if result.get("ok"):
             return True
-    except Exception:
-        pass
-    # Fallback for clients/API installations where Rich Messages are unavailable.
+        # Keep the API error for server logs without exposing the bot token.
+        print("sendRichMessage failed:", result.get("description", "unknown error"))
+    except Exception as e:
+        print("sendRichMessage exception:", e)
+
+    # Compatibility fallback for older Bot API installations.
+    # This is only used if Rich Messages are unavailable; on Bot API 10.3+
+    # the normal path above keeps the copy button inside the same bubble.
     try:
         await chat.send_message(
-            f"<blockquote><b>{safe_title}</b>\n<pre>{safe_url}</pre></blockquote>",
+            f"<blockquote><b>{title}</b>\n<pre>{str(url).replace('&','&amp;').replace('<','&lt;').replace('>','&gt;')}</pre></blockquote>",
             reply_markup=vmess_copy_markup(url),
             parse_mode="HTML"
         )
-        return False
-    except Exception:
-        return False
+    except Exception as e:
+        print("copy fallback failed:", e)
+    return False
 
 
 async def send_vmess_rich(chat, title, url):
