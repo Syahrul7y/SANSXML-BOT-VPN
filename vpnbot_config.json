@@ -1,0 +1,11 @@
+{
+  "bot_token": "8971581338:AAER7w_3WxoQVuKaf1luFIZUJeLDJUQb0ms",
+  "domain": "sgivip.naaofficial.web.id",
+  "owner_ids": [6144358600],
+  "servers": {
+    "sg_1ip": {"name": "🇸🇬 PRIME SG-01", "city": "Singapore", "isp": "DigitalOcean LLC", "ssh_ovpn": "DIGITALOCEAN • PRIME SG-01", "domain": "sgivip.naaofficial.web.id", "price_day": 117, "price_month": 3510, "ip_limit": 1, "slot_max": 50},
+    "sg_2ip": {"name": "🇸🇬 PRIME SG-02", "city": "Singapore", "isp": "DigitalOcean LLC", "ssh_ovpn": "DIGITALOCEAN • PRIME SG-02", "domain": "sgivip.naaofficial.web.id", "price_day": 167, "price_month": 5010, "ip_limit": 2, "slot_max": 50}
+  },
+  "ip_limit": 2,
+  "block_hours": 2
+}
