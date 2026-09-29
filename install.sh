@@ -1211,15 +1211,21 @@ async def send_xray_rich(chat, proto, un, pw, cred, exp, days, sk, is_trial=Fals
     blocks.append({"type":"paragraph","text":"\n".join(lines)})
     blocks.append({"type":"paragraph","text":"URL CONFIGURATION"})
 
+    def wrap_config_url(url, width=46):
+        # Telegram's preformatted block normally keeps a long URL on one line,
+        # which creates a horizontal scroll.  Add visual line breaks only to
+        # the displayed copy; the actual copy_text remains the original URL.
+        text = str(url)
+        return "\n".join(text[i:i+width] for i in range(0, len(text), width))
+
     for title, url in urls:
-        # Match the reference layout: the URL title stays OUTSIDE the card,
-        # while the URL and its SALIN KODE button are stacked inside one
-        # compact block.  This keeps all three configs in the same bubble
-        # without making the whole message look like one giant quote.
+        # Match the reference: all configs stay stacked inside ONE bubble.
+        # The title is plain text, then a compact preformatted card followed
+        # immediately by its copy button.  No blockquote/quote wrapper.
         blocks.append({"type":"paragraph","text":title})
-        inner = [{"type":"pre","text":str(url)}]
+        blocks.append({"type":"pre","text":wrap_config_url(url)})
         if 1 <= len(str(url)) <= 256:
-            inner.append({
+            blocks.append({
                 "type":"buttons",
                 "align":"center",
                 "buttons":[{
@@ -1227,7 +1233,6 @@ async def send_xray_rich(chat, proto, un, pw, cred, exp, days, sk, is_trial=Fals
                     "copy_text":{"text":str(url)}
                 }]
             })
-        blocks.append({"type":"blockquote","blocks":inner})
 
     blocks.append({"type":"paragraph","text":"\n".join(footer)})
 
