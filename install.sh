@@ -520,14 +520,15 @@ def xray_del_user(proto, cred):
     xray_save_cfg(cfg); xray_reload()
     return True
 def xray_build_vmess(host, port, u, path, tls, remark):
-    cfg = {"v":"2","ps":remark,"add":host,"port":str(port),"id":u,"aid":"0","scy":"auto",
-           "net":"ws","type":"none","host":host,"path":path,
-           "tls":"tls" if tls else "","sni":host if tls else ""}
-    return "vmess://" + base64.b64encode(json.dumps(cfg).encode()).decode()
+    # Compact VMESS JSON so the generated URL is as short as possible.
+    # This is also important for Telegram CopyTextButton (max 256 chars).
+    cfg = {"v":"2","ps":remark[:8],"add":host,"port":str(port),"id":u,"aid":"0",
+           "net":"ws","path":path,"tls":"tls" if tls else ""}
+    return "vmess://" + base64.b64encode(json.dumps(cfg,separators=(",",":"),ensure_ascii=False).encode()).decode()
 def xray_build_vmess_grpc(host, u, svc, remark):
-    cfg = {"v":"2","ps":remark,"add":host,"port":"443","id":u,"aid":"0","scy":"auto",
-           "net":"grpc","type":"gun","host":host,"path":svc,"tls":"tls","sni":host}
-    return "vmess://" + base64.b64encode(json.dumps(cfg).encode()).decode()
+    cfg = {"v":"2","ps":remark[:8],"add":host,"port":"443","id":u,"aid":"0",
+           "net":"grpc","type":"gun","path":svc,"tls":"tls"}
+    return "vmess://" + base64.b64encode(json.dumps(cfg,separators=(",",":"),ensure_ascii=False).encode()).decode()
 def xray_build_vless(host, port, u, path, tls, remark):
     p = f"encryption=none&security={'tls' if tls else 'none'}&type=ws&host={host}&path={path}"
     if tls: p += f"&sni={host}"
@@ -1030,7 +1031,7 @@ def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="sg_
          "<b>      ◤ SANSXML VPN STORE ◢</b>",
          "<i>❖ Terima kasih ❖</i>", "</blockquote>"]
     return "\n".join(L)
-def xray_caption(proto, un, pw, cred, exp, days, sk, is_trial=False):
+def xray_caption(proto, un, pw, cred, exp, days, sk, is_trial=False, include_urls=True):
     s = SERVERS.get(sk,{}); host = s.get("domain") or SSH_HOST
     city = s.get("city","Singapore"); isp = s.get("isp","DigitalOcean LLC")
     ssh_ovpn = s.get("ssh_ovpn") or s.get("name","SG NEWMEDIA")
@@ -1071,15 +1072,33 @@ def xray_caption(proto, un, pw, cred, exp, days, sk, is_trial=False):
         L += [f"Host       : {host}","Path       : /vless","Path gRPC  : vless-grpc","WS TLS     : 443",f"WS         : {XRAY_PORTS['vless_ws']}","gRPC TLS   : 443","TCP TLS    : 443"]
     else:
         L += [f"Host       : {host}",f"Trojan TCP : {XRAY_PORTS['trojan_tcp']}","Trojan WS  : 443 /trojan","Trojan gRPC: 443 trojan-grpc"]
-    L += ["","━━━━━━━━━━━━━━━━━━━━━━━","","","<b>URL CONFIGURATION</b>","",
-          f"<b>{t1}</b>",f"<pre>{esc(url1)}</pre>","",
-          f"<b>{t2}</b>",f"<pre>{esc(url2)}</pre>","",
-          f"<b>{t3}</b>",f"<pre>{esc(url3)}</pre>","",
-          "━━━━━━━━━━━━━━━━━━━━━━━","",f"Durasi     : {days} Hari",
+    if include_urls:
+        L += ["","━━━━━━━━━━━━━━━━━━━━━━━","","","<b>URL CONFIGURATION</b>","",
+              f"<b>{t1}</b>",f"<pre>{esc(url1)}</pre>","",
+              f"<b>{t2}</b>",f"<pre>{esc(url2)}</pre>","",
+              f"<b>{t3}</b>",f"<pre>{esc(url3)}</pre>",""]
+    L += ["━━━━━━━━━━━━━━━━━━━━━━━","",f"Durasi     : {days} Hari",
           f"Dibuat     : {cf}",f"Berakhir   : {ef}","",
           "━━━━━━━━━━━━━━━━━━━━━━━","<b>      ◤ SANSXML VPN STORE ◢</b>",
           "<i>❖ Terima kasih ❖</i>","</blockquote>"]
     return "\n".join(L)
+
+def vmess_copy_messages(sk, cred):
+    """Build the three VMESS URLs used by the copy buttons."""
+    s = SERVERS.get(sk,{})
+    host = s.get("domain") or SSH_HOST
+    ssh_ovpn = s.get("ssh_ovpn") or s.get("name","SG NEWMEDIA")
+    url_tls = xray_build_vmess(host,443,cred,'/vmess',True,f'{ssh_ovpn}-WSTLS')
+    url_http = xray_build_vmess(host,XRAY_PORTS['vmess_ws'],cred,'/vmess',False,f'{ssh_ovpn}-WS')
+    url_grpc = xray_build_vmess_grpc(host,cred,'vmess-grpc',f'{ssh_ovpn}-gRPC')
+    return [("◌URL TLS:",url_tls),("◌URL HTTP:",url_http),("◌URL gRPC:",url_grpc)]
+
+def vmess_copy_markup(url):
+    # Telegram CopyTextButton accepts 1-256 characters.
+    if 1 <= len(url) <= 256:
+        return InlineKeyboardMarkup([[CPY("📋 SALIN KODE",url)]])
+    return None
+
 
 # ACTIONS
 async def do_create(chat, uid, user, un, pw, hari, is_trial=False, sk="sg_1ip"):
@@ -1150,7 +1169,23 @@ async def do_create_xray(chat, uid, user, un, pw, hari, sk, proto):
         "first_name":user.first_name or "","username_tg":user.username or ""}
     save_json(ACCOUNTS_FILE,accs)
     add_trx(uid,user.first_name or "User",user.username or "",f"{proto}_akun",price,f"{hari}h {s.get('name','')}")
-    await m.edit_text(xray_caption(proto,un,pw,cred,exp,hari,sk),parse_mode="HTML")
+    if proto == "vmess":
+        # Main account information first, then one copy button per URL
+        # so the result matches the separate copy blocks shown in the reference.
+        await m.edit_text(
+            xray_caption(proto,un,pw,cred,exp,hari,sk,include_urls=False),
+            parse_mode="HTML"
+        )
+        for title, url in vmess_copy_messages(sk, cred):
+            safe_url = url.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+            markup = vmess_copy_markup(url)
+            await chat.send_message(
+                f"<blockquote><b>{title}</b>\n<pre>{safe_url}</pre></blockquote>",
+                reply_markup=markup,
+                parse_mode="HTML"
+            )
+    else:
+        await m.edit_text(xray_caption(proto,un,pw,cred,exp,hari,sk),parse_mode="HTML")
     asyncio.create_task(sync_push_async())
 async def _del_acc(uid, un, user, chat):
     a = get_acc(un)
@@ -1781,12 +1816,23 @@ async def cb(u,c):
             xun = a.get("username",un)
             xsk = a.get('server_key','sg_1ip')
             ref = 0 if a.get("is_trial") else hitung_refund(a)
-            cap = xray_caption(proto,xun,a.get("password",""),xcred,a['exp'],a.get('days',30),xsk,a.get('is_trial',False))
+            cap = xray_caption(proto,xun,a.get("password",""),xcred,a['exp'],a.get('days',30),xsk,a.get('is_trial',False),include_urls=(proto != "vmess"))
             if ref > 0: cap += f"\n\n💰 <b>Refund: {rupiah(ref)}</b>"
             else: cap += "\n\n💰 <i>Refund: Rp 0</i>"
             kb_use = kb_acc_det(real_key)
         try: await q.edit_message_text(cap, reply_markup=kb_use, parse_mode="HTML")
         except: pass
+        if proto == "vmess":
+            for title, url in vmess_copy_messages(xsk, xcred):
+                safe_url = url.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+                markup = vmess_copy_markup(url)
+                try:
+                    await chat.send_message(
+                        f"<blockquote><b>{title}</b>\n<pre>{safe_url}</pre></blockquote>",
+                        reply_markup=markup,
+                        parse_mode="HTML"
+                    )
+                except: pass
         return
     if d.startswith("del_acc|"):
         un = d.split("|",1)[1]
