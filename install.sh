@@ -940,9 +940,9 @@ def kb_ssh_copy(u, p, sk="sg_1ip"):
     ws_l = f"{host}:80@{u}:{p}"
     udp_l = f"{host}:1-65535@{u}:{p}"
     return InlineKeyboardMarkup([
-        [CPY("📋 Salin SSL", ssl_l)],
-        [CPY("📋 Salin WS", ws_l)],
-        [CPY("📋 Salin UDP", udp_l)]])
+        [CPY("SALIN SSL", ssl_l)],
+        [CPY("SALIN WS", ws_l)],
+        [CPY("SALIN UDP", udp_l)]])
 
 # TEXT BUILDERS
 def dash_text(user, uid):
@@ -987,7 +987,7 @@ def xray_server_text(proto):
 def saldo_text(uid, nom=""):
     return (f"<blockquote>\n💰 <b>Masukkan nominal topup:</b>\n\nJumlah saat ini: <b>{rupiah(get_bal(uid))}</b>\n\n"
             f"Nominal input: <b>{rupiah(nom) if nom else 'Rp 0'}</b>\n\n<i>Minimal {rupiah(MIN_TOPUP)}</i>\n</blockquote>")
-def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="sg_1ip"):
+def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="sg_1ip", include_urls=True):
     srv = SERVERS.get(server_key, {})
     head = "TRIAL" if is_trial else ("MANUAL" if manual else "PREMIUM")
     BULAN = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"]
@@ -1002,10 +1002,6 @@ def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="sg_
     ssh_ovpn_val = srv.get("ssh_ovpn") or srv.get("name","SG NEWMEDIA")
     host = srv.get("domain") or SSH_HOST
     quota = srv.get("quota_gb", 700) or 700
-    def esc(t): return t.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
-    ssl_link = f"{host}:443@{u}:{p}"
-    ws_link = f"{host}:80@{u}:{p}"
-    udp_link = f"{host}:1-65535@{u}:{p}"
     L = ["<blockquote>",
          "◤ <b>SSH OVPN ACCOUNT</b> ◢", f"     ❖ <b>{head}</b> ❖", "━━━━━━━━━━━━━━━━━━━━━━━", "", "",
          f"City       : {srv.get('city','Singapore')}",
@@ -1019,17 +1015,21 @@ def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="sg_
          f"Host     : {host}",
          "OpenSSH  : 443, 80, 22", "Dropbear : 443, 109",
          "SSH WS   : 80, 8080, 8081-9999", "SSH SSL  : 443", "SSH UDP  : 1-65535",
-         "OVPN     : 443, 1194, 2200", "BadVPN   : 7100, 7300",
-         "━━━━━━━━━━━━━━━━━━━━━━━", "", "",
-         "<b>URL CONFIGURATION</b>", "",
-         "<b>── SSH SSL ──</b>", f"<blockquote><code>{esc(ssl_link)}</code></blockquote>", "",
-         "<b>── SSH WS ──</b>", f"<blockquote><code>{esc(ws_link)}</code></blockquote>", "",
-         "<b>── SSH UDP ──</b>", f"<blockquote><code>{esc(udp_link)}</code></blockquote>", "",
-         "━━━━━━━━━━━━━━━━━━━━━━━", "",
-         f"Durasi   : {dl}", f"Dibuat   : {created_fmt}", f"Berakhir : {exp_fmt}", "",
-         "━━━━━━━━━━━━━━━━━━━━━━━",
-         "<b>      ◤ SANSXML VPN STORE ◢</b>",
-         "<i>❖ Terima kasih ❖</i>", "</blockquote>"]
+         "OVPN     : 443, 1194, 2200", "BadVPN   : 7100, 7300"]
+    if include_urls:
+        def esc(t): return t.replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+        ssl_link = f"{host}:443@{u}:{p}"
+        ws_link = f"{host}:80@{u}:{p}"
+        udp_link = f"{host}:1-65535@{u}:{p}"
+        L += ["━━━━━━━━━━━━━━━━━━━━━━━", "", "",
+              "<b>URL CONFIGURATION</b>", "",
+              "<b>── SSH SSL ──</b>", f"<blockquote><code>{esc(ssl_link)}</code></blockquote>", "",
+              "<b>── SSH WS ──</b>", f"<blockquote><code>{esc(ws_link)}</code></blockquote>", "",
+              "<b>── SSH UDP ──</b>", f"<blockquote><code>{esc(udp_link)}</code></blockquote>", ""]
+    L += ["━━━━━━━━━━━━━━━━━━━━━━━", "",
+          f"Durasi   : {dl}", f"Dibuat   : {created_fmt}", f"Berakhir : {exp_fmt}", "",
+          "━━━━━━━━━━━━━━━━━━━━━━━", "<b>      ◤ SANSXML VPN STORE ◢</b>",
+          "<i>❖ Terima kasih ❖</i>", "</blockquote>"]
     return "\n".join(L)
 def xray_caption(proto, un, pw, cred, exp, days, sk, is_trial=False, include_urls=True):
     s = SERVERS.get(sk,{}); host = s.get("domain") or SSH_HOST
@@ -1077,7 +1077,8 @@ def xray_caption(proto, un, pw, cred, exp, days, sk, is_trial=False, include_url
               f"<b>{t1}</b>",f"<pre>{esc(url1)}</pre>","",
               f"<b>{t2}</b>",f"<pre>{esc(url2)}</pre>","",
               f"<b>{t3}</b>",f"<pre>{esc(url3)}</pre>",""]
-    L += ["━━━━━━━━━━━━━━━━━━━━━━━","",f"Durasi     : {days} Hari",
+    durasi_label = f"{TRIAL_DURATION_MIN} Menit" if is_trial else f"{days} Hari"
+    L += ["━━━━━━━━━━━━━━━━━━━━━━━","",f"Durasi     : {durasi_label}",
           f"Dibuat     : {cf}",f"Berakhir   : {ef}","",
           "━━━━━━━━━━━━━━━━━━━━━━━","<b>      ◤ SANSXML VPN STORE ◢</b>",
           "<i>❖ Terima kasih ❖</i>","</blockquote>"]
@@ -1096,18 +1097,21 @@ def vmess_copy_messages(sk, cred):
 def vmess_copy_markup(url):
     # Telegram CopyTextButton accepts 1-256 characters.
     if 1 <= len(url) <= 256:
-        return InlineKeyboardMarkup([[CPY("📋 SALIN KODE",url)]])
+        return InlineKeyboardMarkup([[CPY("SALIN KODE",url)]])
     return None
 
-async def send_vmess_rich(chat, title, url):
-    """Send VMESS as a Telegram Rich Message so SALIN KODE is inside the block."""
+async def send_copy_rich(chat, title, url):
+    """Send one config URL as a single Telegram Rich Message with copy control."""
+    def esc(v): return str(v).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;").replace('"',"&quot;")
     safe_url = esc(url)
     safe_title = esc(title)
     # Rich Messages (Bot API 10.1+) allow the copy button to be rendered
     # inside the same message/block, matching the reference UI.
+    # Keep title, URL and copy control in one Rich Message body.
+    # Using one block instead of separate <p>/<blockquote> elements prevents
+    # Telegram clients from rendering the title and URL as two message blocks.
     html = (
-        f"<p><b>{safe_title}</b></p>"
-        f"<blockquote><pre>{safe_url}</pre>"
+        f"<blockquote><b>{safe_title}</b>\n<pre>{safe_url}</pre>"
         f"<tg-button-row align=\"center\"><tg-button type=\"copy_text\" "
         f"text=\"{safe_url}\">SALIN KODE</tg-button></tg-button-row></blockquote>"
     )
@@ -1143,6 +1147,15 @@ async def send_vmess_rich(chat, title, url):
         return False
 
 
+async def send_vmess_rich(chat, title, url):
+    return await send_copy_rich(chat, title, url)
+
+async def send_ssh_copy_messages(chat, u, p, sk="sg_1ip"):
+    srv = SERVERS.get(sk, {}); host = srv.get("domain") or SSH_HOST
+    for title, url in [("SSH SSL",f"{host}:443@{u}:{p}"),("SSH WS",f"{host}:80@{u}:{p}"),("SSH UDP",f"{host}:1-65535@{u}:{p}")]:
+        await send_copy_rich(chat, title, url)
+
+
 # ACTIONS
 async def do_create(chat, uid, user, un, pw, hari, is_trial=False, sk="sg_1ip"):
     s = SERVERS.get(sk,{}); ip = int(s.get("ip_limit",2) or 2)
@@ -1165,8 +1178,8 @@ async def do_create(chat, uid, user, un, pw, hari, is_trial=False, sk="sg_1ip"):
         add_trx(uid,user.first_name or "User",user.username or "","buat_akun",price,f"{hari}h {s.get('name','')}")
     dl = f"{TRIAL_DURATION_MIN} Minute" if is_trial else f"{hari} Hari"
     ex = r.get("exp_ts","")[:10] if is_trial else r["exp"]
-    await m.edit_text(acc_caption(un,pw,ex,dl,ip,r.get("manual",False),is_trial,sk),
-        reply_markup=kb_ssh_copy(un,pw,sk),parse_mode="HTML")
+    await m.edit_text(acc_caption(un,pw,ex,dl,ip,r.get("manual",False),is_trial,sk,include_urls=False),parse_mode="HTML")
+    await send_ssh_copy_messages(chat,un,pw,sk)
     asyncio.create_task(sync_push_async())
 async def do_extend(chat, uid, user, un, hari, sk):
     price = get_price(hari,sk)
@@ -1187,42 +1200,49 @@ async def do_extend(chat, uid, user, un, hari, sk):
     ok2,_ = reduce_bal(uid,price)
     if not ok2: await m.edit_text("❌ Gagal potong saldo.",parse_mode="HTML"); return
     add_trx(uid,user.first_name or "User",user.username or "","perpanjang",price,f"{hari}h {un}")
-    await m.edit_text(acc_caption(un,a["password"],ne,f"{a.get('days',30)} Hari",a.get("limit_ip",1),a.get("manual",False),a.get("is_trial",False),sk),
-        reply_markup=kb_ssh_copy(un,a["password"],sk),parse_mode="HTML")
+    await m.edit_text(acc_caption(un,a["password"],ne,f"{a.get('days',30)} Hari",a.get("limit_ip",1),a.get("manual",False),a.get("is_trial",False),sk,include_urls=False),parse_mode="HTML")
+    await send_ssh_copy_messages(chat,un,a["password"],sk)
     asyncio.create_task(sync_push_async())
-async def do_create_xray(chat, uid, user, un, pw, hari, sk, proto):
-    s = SERVERS.get(sk,{}); price = get_price(hari,sk)
+async def do_create_xray(chat, uid, user, un, pw, hari, sk, proto, is_trial=False):
+    s = SERVERS.get(sk,{}); price = 0 if is_trial else get_price(hari,sk)
     if get_bal(uid) < price:
         kb = InlineKeyboardMarkup([[B("💰 TOPUP SALDO","isi_saldo",style="primary")],[B("🔙 Kembali","menu|main",style="danger")]])
         await chat.send_message(f"<blockquote>❌ <b>Saldo Tidak Cukup</b></blockquote>",reply_markup=kb,parse_mode="HTML"); return
-    m = await chat.send_message(f"⚙️ Membuat <b>{proto.upper()}</b> akun...",parse_mode="HTML")
+    m = await chat.send_message(f"Membuat <b>{proto.upper()}</b> {'TRIAL' if is_trial else 'akun'}...",parse_mode="HTML")
     cred = str(uuid.uuid4()) if proto in ("vmess","vless") else pw
     ok, err = await asyncio.to_thread(xray_add_user,proto,cred)
     if not ok:
         await m.edit_text(f"❌ <b>Gagal</b>\n<code>{err}</code>",parse_mode="HTML"); return
     ok2,_ = reduce_bal(uid,price)
     if not ok2: await m.edit_text("❌ Saldo berubah.",parse_mode="HTML"); return
-    exp = (datetime.now()+timedelta(days=hari)).strftime("%Y-%m-%d")
+    if is_trial:
+        exp = datetime.now().strftime("%Y-%m-%d")
+        exp_ts = (datetime.now()+timedelta(minutes=TRIAL_DURATION_MIN)).strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        exp = (datetime.now()+timedelta(days=hari)).strftime("%Y-%m-%d")
+        exp_ts = exp+" 23:59:59"
     key = f"{proto}_{un}"
     accs = load_json(ACCOUNTS_FILE,{})
     accs[key] = {"user_id":uid,"username":un,"password":pw,
         "uuid":cred if proto != "trojan" else "","proto":proto,"exp":exp,
-        "exp_ts":exp+" 23:59:59","days":hari,"limit_ip":1,"harga":price,
+        "exp_ts":exp_ts,"days":hari,"limit_ip":1,"harga":price,
         "server_key":sk,"created_at":datetime.now().isoformat(),
-        "first_name":user.first_name or "","username_tg":user.username or ""}
+        "first_name":user.first_name or "","username_tg":user.username or "",
+        "is_trial":is_trial}
     save_json(ACCOUNTS_FILE,accs)
-    add_trx(uid,user.first_name or "User",user.username or "",f"{proto}_akun",price,f"{hari}h {s.get('name','')}")
+    if not is_trial:
+        add_trx(uid,user.first_name or "User",user.username or "",f"{proto}_akun",price,f"{hari}h {s.get('name','')}")
     if proto == "vmess":
         # Main account information first, then one copy button per URL
         # so the result matches the separate copy blocks shown in the reference.
         await m.edit_text(
-            xray_caption(proto,un,pw,cred,exp,hari,sk,include_urls=False),
+            xray_caption(proto,un,pw,cred,exp,(hari if not is_trial else TRIAL_DURATION_MIN),sk,is_trial=is_trial,include_urls=False),
             parse_mode="HTML"
         )
         for title, url in vmess_copy_messages(sk, cred):
             await send_vmess_rich(chat, title, url)
     else:
-        await m.edit_text(xray_caption(proto,un,pw,cred,exp,hari,sk),parse_mode="HTML")
+        await m.edit_text(xray_caption(proto,un,pw,cred,exp,hari,sk,is_trial=is_trial),parse_mode="HTML")
     asyncio.create_task(sync_push_async())
 async def _del_acc(uid, un, user, chat):
     a = get_acc(un)
@@ -1306,6 +1326,14 @@ async def cb(u,c):
     q = u.callback_query; await q.answer()
     d = q.data; chat = u.effective_chat
     if d in ("noop","ssh_locked"): return
+    if c.user_data.get("created_in_session"):
+        blocked = (d in ("buat_akun","trial_akun","perpanjang_akun","pilih_layanan") or
+                   d.startswith("pilih|") or d.startswith("buat|") or
+                   d.startswith("buatvmess|") or d.startswith("buatvless|") or
+                   d.startswith("buattrojan|") or d.startswith("extend|"))
+        if blocked:
+            await q.answer("Akun sudah dibuat. Gunakan /start untuk membuat akun lagi.",show_alert=True)
+            return
 
     if d == "refresh":
         try: await q.message.delete()
@@ -1798,6 +1826,18 @@ async def cb(u,c):
         if sk not in SERVERS: await chat.send_message("❌ Server tidak valid.",parse_mode="HTML"); return
         used,mx = get_slot_info(sk)
         if used >= mx: await chat.send_message(f"<blockquote>❌ <b>Slot Penuh</b></blockquote>",parse_mode="HTML"); return
+        mode = c.user_data.get("mode","buat")
+        if mode == "trial":
+            if trial_left(uid) <= 0:
+                await chat.send_message("Batas trial tercapai",parse_mode="HTML"); return
+            use_trial(uid)
+            uq = ''.join(random.choices(string.ascii_lowercase+string.digits,k=4))
+            c.user_data.clear(); c.user_data["created_in_session"] = True
+            # Trial mengikuti pola OVPN: username/password dibuat otomatis, user tidak diminta input.
+            trial_un = f"trial-{uq}"
+            trial_pw = f"trial{uq}"
+            await do_create_xray(chat,uid,u.effective_user,trial_un,trial_pw,1,sk,proto,is_trial=True)
+            return
         c.user_data["proto"] = proto
         c.user_data["buat_step"] = "username"
         c.user_data["buat_data"] = {"server_key":sk,"proto":proto}
@@ -1842,12 +1882,13 @@ async def cb(u,c):
         if proto == "ssh":
             dl = f"{TRIAL_DURATION_MIN} Minute" if a.get("is_trial") else f"{a.get('days',30)} Hari"
             ref = 0 if (a.get("is_trial") or int(a.get("harga",0))<=0) else hitung_refund(a)
-            cap = acc_caption(a.get("username",un),a['password'],a['exp'],dl,a.get('limit_ip',1),a.get('manual',False),a.get('is_trial',False),a.get('server_key','sg_1ip'))
+            xsk_ssh = a.get('server_key','sg_1ip')
+            cap = acc_caption(a.get("username",un),a['password'],a['exp'],dl,a.get('limit_ip',1),a.get('manual',False),a.get('is_trial',False),xsk_ssh,include_urls=False)
             b = get_block_info(a.get("username",un))
             if b: cap += "\n\n🚫 <b>DIBLOKIR</b>"
             elif ref > 0: cap += f"\n\n💰 <b>Refund: {rupiah(ref)}</b>"
             else: cap += "\n\n💰 <i>Refund: Rp 0</i>"
-            kb_use = kb_ssh_copy(a.get("username",un), a.get("password",""), a.get("server_key","sg_1ip"))
+            kb_use = kb_acc_det(real_key)
         else:
             xcred = a.get("uuid") or a.get("password","")
             xun = a.get("username",un)
@@ -1859,6 +1900,9 @@ async def cb(u,c):
             kb_use = kb_acc_det(real_key)
         try: await q.edit_message_text(cap, reply_markup=kb_use, parse_mode="HTML")
         except: pass
+        if proto == "ssh":
+            await send_ssh_copy_messages(chat,a.get("username",un),a.get("password",""),a.get("server_key","sg_1ip"))
+            return
         if proto == "vmess":
             for title, url in vmess_copy_messages(xsk, xcred):
                 await send_vmess_rich(chat, title, url)
