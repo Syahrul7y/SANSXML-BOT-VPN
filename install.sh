@@ -1199,86 +1199,85 @@ def xray_rich_data(proto, un, pw, cred, exp, days, sk, is_trial=False):
     return lines, urls, footer
 
 async def send_xray_rich(chat, proto, un, pw, cred, exp, days, sk, is_trial=False):
-    """Send the COMPLETE XRay account as ONE Telegram Rich Message bubble.
+    """Send the complete XRay account as ONE Rich Message.
 
-    No blockquote/quote wrapper is used. URL titles, URL code blocks, copy buttons,
-    duration and footer all live inside the same bubble.
+    The account itself stays normal text. Each configuration is a compact
+    quotation card containing the title, a wrapping inline-code URL and the
+    COPY button.  Using <code> instead of <pre> is intentional: <pre> keeps
+    long URLs horizontally scrollable, while <code> wraps like the reference
+    bot's pink configuration cards.
     """
-    lines, urls, footer = xray_rich_data(proto,un,pw,cred,exp,days,sk,is_trial)
+    lines, urls, footer = xray_rich_data(proto, un, pw, cred, exp, days, sk, is_trial)
 
-    blocks = []
-    # Account/header/host information: plain paragraphs, not a quote block.
-    blocks.append({"type":"paragraph","text":"\n".join(lines)})
-    blocks.append({"type":"paragraph","text":"URL CONFIGURATION"})
+    import html as _html
 
-    def wrap_config_url(url, width=46):
-        # Telegram's preformatted block normally keeps a long URL on one line,
-        # which creates a horizontal scroll.  Add visual line breaks only to
-        # the displayed copy; the actual copy_text remains the original URL.
-        text = str(url)
-        return "\n".join(text[i:i+width] for i in range(0, len(text), width))
+    # Normal account section: no quote/blockquote around it.
+    parts = [_html.escape("\n".join(lines)), "", "URL CONFIGURATION"]
 
+    # Each URL gets its own stacked quote-card.  The copy button is part of the
+    # same Rich Message, so it stays inside the same overall Telegram bubble.
     for title, url in urls:
-        # Match the reference: all configs stay stacked inside ONE bubble.
-        # The title is plain text, then a compact preformatted card followed
-        # immediately by its copy button.  No blockquote/quote wrapper.
-        blocks.append({"type":"paragraph","text":title})
-        blocks.append({"type":"pre","text":wrap_config_url(url)})
-        if 1 <= len(str(url)) <= 256:
-            blocks.append({
-                "type":"buttons",
-                "align":"center",
-                "buttons":[{
-                    "text":"SALIN KODE",
-                    "copy_text":{"text":str(url)}
-                }]
-            })
+        safe_title = _html.escape(str(title))
+        safe_url = _html.escape(str(url), quote=True)
+        parts.append(
+            f'<blockquote><b>{safe_title}</b>\n'
+            f'<code>{safe_url}</code>\n'
+            f'<tg-button-row align="center">'
+            f'<tg-button type="copy_text" text="{safe_url}">SALIN KODE</tg-button>'
+            f'</tg-button-row></blockquote>'
+        )
 
-    blocks.append({"type":"paragraph","text":"\n".join(footer)})
+    parts.append(_html.escape("\n".join(footer)))
+    rich_html = "\n".join(parts)
 
     def _send():
         import urllib.request, json as _json
         payload = {
             "chat_id": chat.id,
             "rich_message": {
-                "blocks": blocks,
+                "html": rich_html,
                 "skip_entity_detection": True
             }
         }
         req = urllib.request.Request(
             f"https://api.telegram.org/bot{BOT_TOKEN}/sendRichMessage",
-            data=_json.dumps(payload,ensure_ascii=False).encode("utf-8"),
-            headers={"Content-Type":"application/json"},
+            data=_json.dumps(payload, ensure_ascii=False).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
             method="POST"
         )
-        with urllib.request.urlopen(req,timeout=30) as r:
+        with urllib.request.urlopen(req, timeout=30) as r:
             return _json.loads(r.read().decode("utf-8"))
 
     try:
         result = await asyncio.to_thread(_send)
         if result.get("ok"):
             return True
-        print("sendRichMessage failed:",result.get("description","unknown error"))
+        print("sendRichMessage failed:", result.get("description", "unknown error"))
     except Exception as e:
-        print("sendRichMessage exception:",e)
+        print("sendRichMessage exception:", e)
 
-    # Fallback: still keep the COMPLETE account in ONE normal Telegram bubble,
-    # and do not wrap it in a quote/block. Only the copy buttons move outside
-    # the bubble when Rich Messages are unavailable.
+    # Fallback for bots/environments where Rich Messages are unavailable.
+    # Keep the account in one message; inline-keyboard buttons are necessarily
+    # outside the message body in this fallback mode.
     try:
-        def esc_html(t):
-            return str(t).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
-        parts = [esc_html("\n".join(lines)), "", esc_html("URL CONFIGURATION")]
         rows = []
+        normal_parts = [_html.escape("\n".join(lines)), "", "URL CONFIGURATION"]
         for title, url in urls:
-            parts += [esc_html(title), f"<pre>{esc_html(url)}</pre>", ""]
+            normal_parts += [
+                _html.escape(str(title)),
+                f"<blockquote><code>{_html.escape(str(url))}</code></blockquote>",
+                ""
+            ]
             if 1 <= len(str(url)) <= 256:
-                rows.append([CPY("SALIN KODE",str(url))])
-        parts.append(esc_html("\n".join(footer)))
-        await chat.send_message("\n".join(parts),
-            reply_markup=InlineKeyboardMarkup(rows) if rows else None,parse_mode="HTML")
+                rows.append([CPY("SALIN KODE", str(url))])
+        normal_parts.append(_html.escape("\n".join(footer)))
+        await chat.send_message(
+            "\n".join(normal_parts),
+            reply_markup=InlineKeyboardMarkup(rows) if rows else None,
+            parse_mode="HTML"
+        )
     except Exception as e:
-        print("xray rich fallback failed:",e)
+        print("xray rich fallback failed:", e)
     return False
 
 async def send_copy_rich(chat, title, url):
