@@ -24,16 +24,12 @@ echo ""
   fuser -k 80/tcp 8080/tcp 443/tcp 8443/tcp 7300/udp 2>/dev/null
   pkill -f ws-ssh.py 2>/dev/null; pkill -f badvpn-udpgw 2>/dev/null
   pkill -f vpnbot 2>/dev/null; pkill -f zivpn 2>/dev/null
-  pkill -f "/usr/local/sbin/menu" 2>/dev/null; pkill -f vps-menu 2>/dev/null
   sleep 1
   rm -f /usr/local/bin/ws-ssh.py /usr/bin/badvpn-udpgw /usr/local/bin/badvpn-udpgw
   rm -f /etc/stunnel/stunnel.conf /etc/stunnel/stunnel.pem
-  rm -f /usr/local/bin/zivpn /usr/local/sbin/menu /usr/local/bin/vps-menu
-  rm -rf /etc/zivpn /usr/local/zivpn /usr/local/src/badvpn
-  rm -f /etc/profile.d/*menu* /etc/profile.d/*sans* /etc/profile.d/*vpn*
   rm -f /root/bot.py /root/vpnbot.log /root/bot_compile.log
-  rm -f /root/install.sh /root/uninstall.sh /root/reset_vps.sh
-  rm -f /root/patch_*.py /root/migrate.sh /root/restore_ssh_users.sh
+  rm -f /root/vpnbot_*.json /root/vpnbot_backup.sh /etc/sansxml-backup.conf
+  rm -rf /root/vpnbot_backup
   rm -f /root/.ssh/id_bot /root/.ssh/id_bot.pub /root/.bash_profile
   rm -f /etc/ssh/sshd_config.d/99-vpnbot.conf
   rm -rf /tmp/badvpn /etc/sansxml-* /etc/motd.d
@@ -219,10 +215,14 @@ EOF
   [ -f /usr/bin/badvpn-udpgw ] && systemctl enable udpgw >/dev/null 2>&1 && systemctl restart udpgw
   sleep 2 ) & spin $! "Start VPN services"
 
-# 4. SSH CONFIG
+# 4. SSH CONFIG + BANNER CUSTOM
 rm -rf /etc/update-motd.d/* 2>/dev/null
-printf '<br><font color="#ff00aa"><b>SANSXML VPN STORE</b></font><br><font color="#ffff00"><b>PREMIUM VPN SERVER</b></font><br><br>' > /etc/issue.net
+
+cat > /etc/issue.net << 'BEOF'
+<br><font color="#ff00aa"><b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;▬▬▬▬▬▬ஜ۩۞۩ஜ▬▬▬▬▬▬</b></font><br><font color="#ffffff"><b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;---&nbsp;卐&nbsp;</b></font><font color="#ffff00"><b>SANSXML&nbsp;VPN&nbsp;STORE</b></font><font color="#ffffff"><b>&nbsp;卐&nbsp;---</b></font><br><font color="#ff00aa"><b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;▬▬▬▬▬▬ஜ۩۞۩ஜ▬▬▬▬▬▬</b></font><br><font color="#ffffff"><b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;──&nbsp;PREMIUM&nbsp;VPN&nbsp;SERVER&nbsp;──</b></font><br><font color="#ffffff"><b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;---&nbsp;卍&nbsp;TERM&nbsp;OF&nbsp;SERVICE&nbsp;卐&nbsp;---</b></font><br><font color="#ffffff"><b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;NO&nbsp;MULTI&nbsp;LOGIN&nbsp;!!</b></font><br><font color="#ffffff"><b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;NO&nbsp;HACKING&nbsp;AND&nbsp;CARDING</b></font><br><font color="#ffff00"><b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;👉&nbsp;MULTI&nbsp;LOGIN&nbsp;BANNED&nbsp;👈</b></font><br><font color="#ff00aa"><b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;▬▬▬▬▬▬ஜ۩۞۩ஜ▬▬▬▬▬▬</b></font><br><font color="#ffffff"><b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;ORDER&nbsp;CONFIG&nbsp;PREMIUM:&nbsp;</b></font><font color="#00ff44"><b>wa.me/6289527419748</b></font><br><font color="#ffffff"><b>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;BOT&nbsp;ORDER&nbsp;VPN:&nbsp;</b></font><font color="#00ff44"><b>t.me/unokwn</b></font><br><br>
+BEOF
 cp /etc/issue.net /etc/motd
+
 sed -i '/^[[:space:]]*ListenAddress/d' /etc/ssh/sshd_config
 mkdir -p /etc/ssh/sshd_config.d
 cat > /etc/ssh/sshd_config.d/99-vpnbot.conf << 'SSHEOF'
@@ -241,12 +241,26 @@ TCPKeepAlive yes
 SSHEOF
 systemctl restart ssh 2>/dev/null || systemctl restart sshd
 
-# 5. KONFIGURASI BOT
+# 5. KONFIGURASI BOT + BACKUP GITHUB
 echo ""
-echo -e "  ${YELLOW}▸ Konfigurasi Bot${NC}"
+echo -e "  ${YELLOW}▸ Konfigurasi Bot & Backup${NC}"
 echo ""
 read -r -p "$(echo -e ${GREEN}'  Bot Token Telegram : '${NC})" BOT_TOKEN < /dev/tty
 if [ -z "$BOT_TOKEN" ]; then echo -e "  ${RED}❌ Token tidak boleh kosong${NC}"; exit 1; fi
+
+GH_USER="Syahrul7y"
+GH_REPO="Backup"
+GH_EMAIL="hodamkecil@gmail.com"
+GH_TOKEN="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"
+
+cat > /etc/sansxml-backup.conf << GHCFG
+GH_USER="${GH_USER}"
+GH_REPO="${GH_REPO}"
+GH_TOKEN="${GH_TOKEN}"
+GH_EMAIL="${GH_EMAIL}"
+GHCFG
+chmod 600 /etc/sansxml-backup.conf
+echo -e "  ${GREEN}✓${NC}  Backup config tersimpan (${GH_USER}/${GH_REPO})"
 
 DOMAIN="sgivip.naaofficial.web.id"
 ADMIN_ID="6144358600"
@@ -265,13 +279,12 @@ cat > /root/vpnbot_config.json << CFGEOF
 }
 CFGEOF
 
-# 6. INSTALL BOT.PY (dari base64 heredoc - full version)
+# 6. INSTALL BOT.PY
 echo ""
 echo -e "  ${YELLOW}▸ Install Bot${NC}"
 mkdir -p /root
-# Bot.py lengkap (menggunakan file yang sudah ada di pesan sebelumnya)
-# Download dari GitHub kalau ada, atau buat baru
-( cat > /root/bot.py << 'BOTPYEOF'
+(
+cat > /root/bot.py << 'BOTPYEOF'
 #!/usr/bin/env python3
 import re, io, json, os, logging, subprocess, asyncio, base64, random, string, socket, shutil, time
 from datetime import datetime, timedelta
@@ -428,11 +441,10 @@ def setup_backup_env(ghu, ghr, ght, ghe):
         remote = f"https://{ghu}:{ght}@github.com/{ghu}/{ghr}.git"
         subprocess.run(["git", "remote", "remove", "origin"], cwd=bdir, capture_output=True)
         subprocess.run(["git", "remote", "add", "origin", remote], cwd=bdir, capture_output=True)
-        pulled = False
         for branch in ["main", "master"]:
             r = subprocess.run(["git", "pull", "origin", branch, "--allow-unrelated-histories", "--no-rebase", "-X", "ours"],
                 cwd=bdir, capture_output=True, text=True, timeout=30)
-            if r.returncode == 0: pulled = True; break
+            if r.returncode == 0: break
         restored = 0
         for f in ["vpnbot_users.json","vpnbot_balance.json","vpnbot_accounts.json",
                   "vpnbot_trial.json","vpnbot_trx.json","vpnbot_blocked.json"]:
@@ -451,20 +463,49 @@ def setup_backup_env(ghu, ghr, ght, ghe):
     except Exception as e:
         return False, str(e)
 
-def reset_backup_env():
+def wipe_local_data():
+    deleted = {"json": 0, "users": 0, "folder": False}
+    for f in ["vpnbot_users.json","vpnbot_balance.json","vpnbot_accounts.json",
+              "vpnbot_trial.json","vpnbot_trx.json","vpnbot_blocked.json"]:
+        p = f"/root/{f}"
+        if os.path.exists(p):
+            try: os.remove(p); deleted["json"] += 1
+            except: pass
     try:
-        ts = time.strftime("%Y%m%d_%H%M%S")
+        r = subprocess.run("awk -F: '$3>=1000 && $3<60000 {print $1}' /etc/passwd",
+            shell=True, capture_output=True, text=True, timeout=10)
+        for un in r.stdout.split():
+            try:
+                subprocess.run(f"pkill -9 -u {un} 2>/dev/null", shell=True, timeout=5)
+                subprocess.run(f"userdel -r {un} 2>/dev/null", shell=True, timeout=15)
+                deleted["users"] += 1
+            except: pass
+    except: pass
+    if os.path.exists("/root/vpnbot_backup"):
+        try: shutil.rmtree("/root/vpnbot_backup"); deleted["folder"] = True
+        except: pass
+    if os.path.exists("/root/vpnbot_backup.sh"):
+        try: os.remove("/root/vpnbot_backup.sh")
+        except: pass
+    subprocess.run("crontab -l 2>/dev/null | grep -v vpnbot_backup.sh | crontab -", shell=True)
+    logger.info(f"[WIPE] JSON:{deleted['json']} User:{deleted['users']} Folder:{deleted['folder']}")
+    return deleted
+
+def reset_backup_env(wipe_github=True, wipe_local=True):
+    result = {"github": False, "local": {}, "ts": time.strftime("%Y%m%d_%H%M%S")}
+    try:
         conf = load_backup_conf()
-        bdir = "/root/vpnbot_backup"
-        if conf.get("GH_USER") and conf.get("GH_REPO") and conf.get("GH_TOKEN"):
-            if not os.path.exists(bdir):
-                os.makedirs(bdir, exist_ok=True)
+        if wipe_github and conf.get("GH_USER") and conf.get("GH_REPO") and conf.get("GH_TOKEN"):
+            bdir = "/root/vpnbot_backup"
+            os.makedirs(bdir, exist_ok=True)
+            if not os.path.exists(f"{bdir}/.git"):
                 subprocess.run(["git", "init", "-q"], cwd=bdir, capture_output=True)
-                subprocess.run(["git", "config", "user.email", conf["GH_EMAIL"]], cwd=bdir, capture_output=True)
-                subprocess.run(["git", "config", "user.name", conf["GH_USER"]], cwd=bdir, capture_output=True)
-                subprocess.run(["git", "branch", "-M", "main"], cwd=bdir, capture_output=True)
-                remote = f"https://{conf['GH_USER']}:{conf['GH_TOKEN']}@github.com/{conf['GH_USER']}/{conf['GH_REPO']}.git"
-                subprocess.run(["git", "remote", "add", "origin", remote], cwd=bdir, capture_output=True)
+            subprocess.run(["git", "config", "user.email", conf.get("GH_EMAIL","bot@local")], cwd=bdir, capture_output=True)
+            subprocess.run(["git", "config", "user.name", conf.get("GH_USER","bot")], cwd=bdir, capture_output=True)
+            subprocess.run(["git", "branch", "-M", "main"], cwd=bdir, capture_output=True)
+            remote = f"https://{conf['GH_USER']}:{conf['GH_TOKEN']}@github.com/{conf['GH_USER']}/{conf['GH_REPO']}.git"
+            subprocess.run(["git", "remote", "remove", "origin"], cwd=bdir, capture_output=True)
+            subprocess.run(["git", "remote", "add", "origin", remote], cwd=bdir, capture_output=True)
             for f in os.listdir(bdir):
                 if f == ".git": continue
                 fp = os.path.join(bdir, f)
@@ -472,19 +513,24 @@ def reset_backup_env():
                     if os.path.isfile(fp): os.remove(fp)
                     elif os.path.isdir(fp): shutil.rmtree(fp)
                 except: pass
-            with open(f"{bdir}/README.md", "w") as f: f.write(f"# VPN Backup\nReset {ts}\n")
+            with open(f"{bdir}/.wipe", "w") as f: f.write(f"RESET {result['ts']}\n")
             subprocess.run(["git", "add", "-A"], cwd=bdir, capture_output=True)
-            subprocess.run(["git", "-c", f"user.email={conf['GH_EMAIL']}", "-c", f"user.name={conf['GH_USER']}",
-                           "commit", "--allow-empty", "-m", f"RESET {ts}"], cwd=bdir, capture_output=True)
+            subprocess.run(["git", "-c", f"user.email={conf.get('GH_EMAIL','bot@local')}",
+                            "-c", f"user.name={conf.get('GH_USER','bot')}",
+                            "commit", "--allow-empty", "-m", f"RESTORE TOTAL {result['ts']}"],
+                cwd=bdir, capture_output=True)
             for branch in ["main", "master"]:
-                r = subprocess.run(["git", "push", "origin", branch, "-f"], cwd=bdir, capture_output=True, text=True, timeout=30)
-                if r.returncode == 0: break
-        if os.path.exists("/etc/sansxml-backup.conf"): os.remove("/etc/sansxml-backup.conf")
-        subprocess.run("crontab -l 2>/dev/null | grep -v vpnbot_backup.sh | crontab -", shell=True)
-        if os.path.exists("/root/vpnbot_backup.sh"): os.remove("/root/vpnbot_backup.sh")
-        if os.path.exists(bdir): shutil.rmtree(bdir)
-        return True, ts
-    except Exception as e: return False, str(e)
+                r = subprocess.run(["git", "push", "origin", branch, "-f"],
+                    cwd=bdir, capture_output=True, text=True, timeout=30)
+                if r.returncode == 0: result["github"] = True; break
+        if wipe_local:
+            result["local"] = wipe_local_data()
+        if os.path.exists("/etc/sansxml-backup.conf"):
+            try: os.remove("/etc/sansxml-backup.conf")
+            except: pass
+        return True, result
+    except Exception as e:
+        return False, {"error": str(e)[:200]}
 
 def ssh_create(username, password, days, is_trial=False):
     now = datetime.now()
@@ -608,7 +654,7 @@ def add_trx(uid, name, uname, tipe, jumlah, ket=""):
 def get_stats(uid=None):
     d = load_json(TRX_FILE,[])
     if uid: d = [t for t in d if t["user_id"]==uid]
-    today = datetime.now().strftime("%Y-%m-%d"); week = (datetime.now()-timedelta(days=7)).strftime("%Y-%m-%d"); month = datetime.now().strftime("%Y-%m")
+    week = (datetime.now()-timedelta(days=7)).strftime("%Y-%m-%d"); month = datetime.now().strftime("%Y-%m")
     return {"minggu":sum(1 for t in d if t["waktu"][:10]>=week and t["tipe"]=="buat_akun"),
             "bulan":sum(1 for t in d if t["waktu"].startswith(month) and t["tipe"]=="buat_akun"),
             "total":sum(1 for t in d if t["tipe"]=="buat_akun")}
@@ -665,6 +711,7 @@ def backup_config_text():
              "───────────────────────",
              "<i>Backup otomatis tiap 5 menit ke repo private.</i>",
              "<i>Setiap perubahan data → auto push.</i>",
+             "<i>⚠️ Ganti field → auto hapus & re-setup.</i>",
              "</blockquote>"])
 
 def kb_backup():
@@ -673,7 +720,7 @@ def kb_backup():
          InlineKeyboardButton("📁 Ganti Repo", callback_data="backup_edit|repo")],
         [InlineKeyboardButton("🔑 Ganti Token", callback_data="backup_edit|token"),
          InlineKeyboardButton("📧 Ganti Email", callback_data="backup_edit|email")],
-        [InlineKeyboardButton("🗑️ Reset Backup", callback_data="backup_reset")],
+        [InlineKeyboardButton("🗑️ RESTORE TOTAL", callback_data="backup_reset")],
         [InlineKeyboardButton("🔙 Kembali", callback_data="admin|menu")]])
 
 def kb_admin():
@@ -1041,9 +1088,9 @@ async def cb(u, c):
         if not is_owner(uid): return
         field = d.split("|")[1]; c.user_data["backup_field"] = field
         prompts = {
-            "user": "Kirim <b>username GitHub</b>:\nContoh: <code>accbotvsbot-blip</code>",
-            "repo": "Kirim <b>nama repo private</b>:\nContoh: <code>VPN-backup-</code>",
-            "token": "Kirim <b>GitHub token</b> (ghp_xxx atau github_pat_xxx):\n\n⚠️ <i>Auto-delete setelah diterima.</i>",
+            "user": "Kirim <b>username GitHub</b>:\nContoh: <code>accbotvsbot-blip</code>\n\n⚠️ <i>Ganti = auto hapus folder & re-setup.</i>",
+            "repo": "Kirim <b>nama repo private</b>:\nContoh: <code>VPN-backup-</code>\n\n⚠️ <i>Ganti = auto hapus folder & re-setup.</i>",
+            "token": "Kirim <b>GitHub token</b> (ghp_xxx / github_pat_xxx):\n\n⚠️ <i>Auto-delete setelah diterima.</i>",
             "email": "Kirim <b>email GitHub</b>:\nContoh: <code>user@gmail.com</code>"
         }
         try: await q.edit_message_text(f"✏️ <b>GANTI {field.upper()}</b>\n\n{prompts.get(field,'')}",
@@ -1054,30 +1101,48 @@ async def cb(u, c):
         if not is_owner(uid): return
         try:
             await q.edit_message_text(
-                "⚠️ <b>RESET BACKUP</b>\n\n<blockquote>Semua file backup di GitHub akan DIHAPUS:\n"
-                "├ File JSON (users, saldo, akun, dll)\n├ Config backup lokal\n"
-                "├ Cron auto backup\n╰ Folder backup\n</blockquote>\n\n"
-                "<i>Data user aktif di VPS tetap aman.</i>",
+                "⚠️ <b>RESTORE TOTAL</b>\n\n<blockquote>"
+                "🔴 SEMUA data akan DIHAPUS PERMANEN:\n"
+                "├ 📄 File JSON (users, saldo, akun, trial, trx, blocked)\n"
+                "├ 👤 Semua user OS (UID 1000-59999)\n"
+                "├ 📁 Folder /root/vpnbot_backup\n"
+                "├ 🔧 Config /etc/sansxml-backup.conf\n"
+                "├ ⏰ Cron auto-backup\n"
+                "╰ ☁️ Isi repo GitHub (force-clear)\n\n"
+                "⚠️ <i>Tindakan ini TIDAK BISA dibatalkan!</i>"
+                "</blockquote>\n\nYakin ingin restore total?",
                 reply_markup=InlineKeyboardMarkup([
-                    [InlineKeyboardButton("⚠️ Ya, Reset", callback_data="backup_reset_yes")],
+                    [InlineKeyboardButton("🗑️ YA, HAPUS SEMUA", callback_data="backup_reset_yes")],
                     [InlineKeyboardButton("❌ Batal", callback_data="admin|backup")]]),
                 parse_mode="HTML")
         except: pass
         return
     if d == "backup_reset_yes":
         if not is_owner(uid): return
-        try: await q.edit_message_text("🗑️ <b>Reset backup...</b>", parse_mode="HTML")
+        try: await q.edit_message_text("🗑️ <b>Wipe total sedang berjalan...</b>\n\n<i>Mohon tunggu...</i>", parse_mode="HTML")
         except: pass
-        ok, info = await asyncio.to_thread(reset_backup_env)
+        ok, info = await asyncio.to_thread(reset_backup_env, True, True)
         if ok:
-            m = ("✅ <b>Reset berhasil!</b>\n\n<blockquote>├ GitHub repo : <b>dibersihkan</b>\n"
-                 "├ Config lokal : <b>dihapus</b>\n├ Cron : <b>dimatikan</b>\n"
-                 "╰ Folder backup : <b>dihapus</b>\n</blockquote>\n\n"
-                 "<i>Isi ulang 4 field untuk setup fresh.</i>")
+            loc = info.get("local", {})
+            m = ("✅ <b>RESTORE TOTAL SELESAI</b>\n\n<blockquote>"
+                 "🗑️ <b>Lokal VPS:</b>\n"
+                 f"├ JSON dihapus : <b>{loc.get('json',0)} file</b>\n"
+                 f"├ User OS hapus : <b>{loc.get('users',0)} user</b>\n"
+                 f"╰ Folder backup : <b>{'dihapus' if loc.get('folder') else '-'}</b>\n\n"
+                 f"☁️ <b>GitHub:</b> <b>{'dibersihkan' if info.get('github') else 'skip'}</b>\n\n"
+                 f"⏰ {info.get('ts','')}\n"
+                 "</blockquote>\n\n"
+                 "<i>Isi ulang 4 field untuk setup fresh.</i>\n"
+                 "<i>Bot akan restart otomatis 5 detik.</i>")
+            try: await q.edit_message_text(m, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Kembali", callback_data="admin|menu")]]), parse_mode="HTML")
+            except: pass
+            logger.info("[RESTORE-TOTAL] Wipe selesai, restart bot...")
+            await asyncio.sleep(5)
+            subprocess.Popen(["systemctl", "restart", "vpnbot"])
         else:
-            m = f"❌ <b>Gagal</b>\n<code>{info[:200]}</code>"
-        try: await q.edit_message_text(m, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Kembali", callback_data="admin|menu")]]), parse_mode="HTML")
-        except: pass
+            m = f"❌ <b>Gagal</b>\n<code>{info.get('error','unknown')[:200]}</code>"
+            try: await q.edit_message_text(m, reply_markup=InlineKeyboardMarkup([[InlineKeyboardButton("🔙 Kembali", callback_data="admin|backup")]]), parse_mode="HTML")
+            except: pass
         return
 
     if d.startswith("extend|"):
@@ -1367,7 +1432,8 @@ async def msg(u, c):
         if backup_field == "token":
             try: await u.message.delete()
             except: pass
-        conf = load_backup_conf()
+        old_conf = load_backup_conf()
+        conf = dict(old_conf)
         err = None
         if backup_field == "user":
             if not re.match(r'^[a-zA-Z0-9-]+$', t): err = "Username tidak valid"
@@ -1386,26 +1452,41 @@ async def msg(u, c):
             await u.message.reply_text(f"❌ {err}\n\nCoba kirim ulang:", parse_mode="HTML")
             c.user_data["backup_field"] = backup_field
             return
+
+        changed = (old_conf.get(f"GH_{backup_field.upper()}") != conf.get(f"GH_{backup_field.upper()}"))
         save_backup_conf(conf["GH_USER"], conf["GH_REPO"], conf["GH_TOKEN"], conf["GH_EMAIL"])
+
         all_ok = all([conf["GH_USER"], conf["GH_REPO"], conf["GH_TOKEN"], conf["GH_EMAIL"]])
         if all_ok:
-            notify = await u.message.reply_text("⏳ <b>Pull dari GitHub & restore...</b>", parse_mode="HTML")
+            notify_txt = "⏳ <b>Pull dari GitHub & restore...</b>"
+            if changed:
+                notify_txt = "⏳ <b>Field berubah!</b>\n\n🗑️ Hapus folder backup lama...\n📥 Pull fresh dari GitHub..."
+            notify = await u.message.reply_text(notify_txt, parse_mode="HTML")
+            if changed:
+                if os.path.exists("/root/vpnbot_backup"):
+                    try: shutil.rmtree("/root/vpnbot_backup")
+                    except: pass
+                subprocess.run("crontab -l 2>/dev/null | grep -v vpnbot_backup.sh | crontab -", shell=True)
             ok, info = await asyncio.to_thread(setup_backup_env, conf["GH_USER"], conf["GH_REPO"], conf["GH_TOKEN"], conf["GH_EMAIL"])
             if ok:
                 ccount, scount = await asyncio.to_thread(restore_ssh_users_from_json)
                 try: await notify.delete()
                 except: pass
+                tag = "🔄 <b>Re-setup (field berubah)</b>" if changed else "✅ <b>Disimpan!</b>"
                 await u.message.reply_text(
-                    f"✅ <b>Disimpan!</b>\n\n<blockquote>✅ Auto backup aktif (5 menit)\n"
-                    f"✅ File JSON direstore : <b>{info}</b>\n✅ User OS dibuat ulang : <b>{ccount}</b>\n"
-                    f"╰ Skip : <b>{scount}</b>\n</blockquote>\n\n" + backup_config_text(),
+                    f"{tag}\n\n<blockquote>"
+                    f"✅ Auto backup aktif (5 menit)\n"
+                    f"✅ File JSON direstore : <b>{info}</b>\n"
+                    f"✅ User OS dibuat ulang : <b>{ccount}</b>\n"
+                    f"╰ Skip : <b>{scount}</b>\n"
+                    f"</blockquote>\n\n" + backup_config_text(),
                     reply_markup=kb_backup(), parse_mode="HTML")
             else:
                 try: await notify.delete()
                 except: pass
-                await u.message.reply_text(f"❌ <b>Gagal</b>\n<code>{info[:200]}</code>", reply_markup=kb_backup(), parse_mode="HTML")
+                await u.message.reply_text(f"❌ <b>Gagal</b>\n<code>{str(info)[:200]}</code>", reply_markup=kb_backup(), parse_mode="HTML")
         else:
-            await u.message.reply_text(f"✅ <b>Disimpan!</b>\n\n" + backup_config_text(), reply_markup=kb_backup(), parse_mode="HTML")
+            await u.message.reply_text(f"✅ <b>Disimpan!</b>\n\n<i>Lengkapi sisa field untuk aktivasi.</i>\n\n" + backup_config_text(), reply_markup=kb_backup(), parse_mode="HTML")
         return
 
     srv_edit = c.user_data.get("srv_edit")
@@ -1451,6 +1532,9 @@ async def msg(u, c):
             parse_mode="HTML")
         return
 
+    # ═══════════════════════════════════════════════
+    # BUAT AKUN — Prompt "1-30", tapi HARI_MAX=365
+    # ═══════════════════════════════════════════════
     step = c.user_data.get("buat_step")
     if step:
         data = c.user_data.get("buat_data",{})
@@ -1468,15 +1552,16 @@ async def msg(u, c):
                 await u.message.reply_text("🚫 <b>Password minimal 5 karakter</b>", parse_mode="HTML")
                 await u.message.reply_text("🔑 Masukkan password akun :", parse_mode="HTML"); return
             data["password"] = t; c.user_data["buat_data"] = data; c.user_data["buat_step"] = "durasi"
-            await u.message.reply_text("📆 Masukkan masa aktif 1-365 (hari) :", parse_mode="HTML"); return
+            await u.message.reply_text("📆 Masukkan masa aktif 1-30 (hari) :", parse_mode="HTML"); return
         if step == "durasi":
-            try: hari = int(re.sub(r'[^0-9]','',t))
-            except:
-                await u.message.reply_text("🚫 <b>Masa aktif tidak valid.</b>", parse_mode="HTML")
-                await u.message.reply_text("📆 Masukkan 1-365 hari :", parse_mode="HTML"); return
+            # Validasi: HANYA ANGKA
+            if not t.isdigit():
+                await u.message.reply_text("🚫 <b>Harus angka! Contoh: 30</b>\n<i>Tidak boleh huruf/simbol.</i>", parse_mode="HTML")
+                await u.message.reply_text("📆 Masukkan masa aktif 1-30 (hari) :", parse_mode="HTML"); return
+            hari = int(t)
             if not (HARI_MIN <= hari <= HARI_MAX):
-                await u.message.reply_text("🚫 <b>Masa aktif tidak valid.</b>", parse_mode="HTML")
-                await u.message.reply_text("📆 Masukkan 1-365 hari :", parse_mode="HTML"); return
+                await u.message.reply_text(f"🚫 <b>Masa aktif harus {HARI_MIN}-{HARI_MAX} hari.</b>", parse_mode="HTML")
+                await u.message.reply_text("📆 Masukkan masa aktif 1-30 (hari) :", parse_mode="HTML"); return
             un = data.get("username"); pw = data.get("password")
             server_key = data.get("server_key", "sg_1ip")
             price = get_price(hari, server_key)
@@ -1491,6 +1576,9 @@ async def msg(u, c):
             await do_create_account(u.effective_chat, uid, u.effective_user, un, pw, hari, server_key=server_key)
             return
 
+    # ═══════════════════════════════════════════════
+    # PERPANJANG — Prompt "1-30", tapi HARI_MAX=365
+    # ═══════════════════════════════════════════════
     estep = c.user_data.get("extend_step")
     if estep:
         data = c.user_data.get("extend_data", {})
@@ -1514,15 +1602,16 @@ async def msg(u, c):
                 await u.message.reply_text("🚫 <b>Password salah.</b>", parse_mode="HTML")
                 await u.message.reply_text("🔑 Masukkan password akun :", parse_mode="HTML"); return
             c.user_data["extend_step"] = "durasi"
-            await u.message.reply_text("📆 Masukkan masa aktif tambahan 1-365 (hari) :", parse_mode="HTML"); return
+            await u.message.reply_text("📆 Masukkan masa aktif 1-30 (hari) :", parse_mode="HTML"); return
         if estep == "durasi":
-            try: hari = int(re.sub(r'[^0-9]','',t))
-            except:
-                await u.message.reply_text("🚫 <b>Masa aktif tidak valid.</b>", parse_mode="HTML")
-                await u.message.reply_text("📆 Masukkan 1-365 hari :", parse_mode="HTML"); return
+            # Validasi: HANYA ANGKA
+            if not t.isdigit():
+                await u.message.reply_text("🚫 <b>Harus angka! Contoh: 30</b>\n<i>Tidak boleh huruf/simbol.</i>", parse_mode="HTML")
+                await u.message.reply_text("📆 Masukkan masa aktif 1-30 (hari) :", parse_mode="HTML"); return
+            hari = int(t)
             if not (HARI_MIN <= hari <= HARI_MAX):
-                await u.message.reply_text("🚫 <b>Masa aktif tidak valid.</b>", parse_mode="HTML")
-                await u.message.reply_text("📆 Masukkan 1-365 hari :", parse_mode="HTML"); return
+                await u.message.reply_text(f"🚫 <b>Masa aktif harus {HARI_MIN}-{HARI_MAX} hari.</b>", parse_mode="HTML")
+                await u.message.reply_text("📆 Masukkan masa aktif 1-30 (hari) :", parse_mode="HTML"); return
             un = data.get("username")
             c.user_data["extend_step"] = None; c.user_data["extend_data"] = {}
             c.user_data["created_in_session"] = True
@@ -1560,7 +1649,8 @@ def main():
 if __name__ == "__main__":
     main()
 BOTPYEOF
-chmod +x /root/bot.py ) & spin $! "Install Bot"
+chmod +x /root/bot.py
+) & spin $! "Install Bot"
 
 python3 -m py_compile /root/bot.py 2>&1 | tee /root/bot_compile.log >/dev/null
 [ -s /root/bot_compile.log ] && echo -e "  ${RED}❌ Bot error — cek /root/bot_compile.log${NC}"
@@ -1602,9 +1692,6 @@ echo -e "  ${CYAN}Domain${NC} : ${GREEN}$DOMAIN${NC}"
 echo -e "  ${CYAN}Bot${NC}    : Cek di Telegram (/start)"
 echo -e "  ${CYAN}Log${NC}    : tail -f /root/vpnbot.log"
 echo ""
-echo -e "  ${YELLOW}📌 WAJIB — Setup Backup GitHub:${NC}"
-echo -e "  ${WHITE}/start → PENGATURAN → Backup GitHub${NC}"
-echo -e "  ${WHITE}Isi: Username, Repo, Token, Email${NC}"
-echo -e "  ${WHITE}→ Auto pull + restore + push${NC}"
-echo -e "  ${RED}Tanpa setup backup → user TIDAK BISA buat akun${NC}"
+echo -e "  ${GREEN}📌 Masa Aktif${NC}: Prompt 1-30, Validasi 1-365"
+echo -e "  ${GREEN}📌 Backup${NC}  : ${GH_USER}/${GH_REPO}"
 echo ""
