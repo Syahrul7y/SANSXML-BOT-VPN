@@ -16,6 +16,8 @@
     "is_trial": true,
     "server_key": "sg_2ip",
     "server": "🇸🇬 PRIME SG-02",
-    "proto": "ssh"
+    "proto": "ssh",
+    "os_deleted": true,
+    "deleted_at": "2026-09-30T22:49:56.485641"
   }
 }
