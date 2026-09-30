@@ -1,72 +1,98 @@
 #!/bin/bash
 export DEBIAN_FRONTEND=noninteractive
-CYAN='\033[1;36m'; GREEN='\033[1;32m'; RED='\033[1;31m'
-YELLOW='\033[1;33m'; MAGENTA='\033[1;35m'; WHITE='\033[1;37m'; NC='\033[0m'
+CYAN='\033[1;36m'; GREEN='\033[1;34m'; RED='\033[1;31m'
+YELLOW='\033[1;33m'; MAGENTA='\033[1;35m'; WHITE='\033[1;37m'; BLUE='\033[1;34m'; NC='\033[0m'
 
-spin(){ local pid=$1 msg="$2"; local f=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
-    while kill -0 $pid 2>/dev/null; do for x in "${f[@]}"; do printf "\r  ${CYAN}${x}${NC}  ${WHITE}%s${NC}   " "$msg"; sleep 0.08; kill -0 $pid 2>/dev/null || break; done; done
-    printf "\r  ${GREEN}✓${NC}  ${WHITE}%s${NC}        \n" "$msg"; }
+spin(){
+  local pid=$1 msg="$2"
+  local f=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+  while kill -0 "$pid" 2>/dev/null; do
+    for x in "${f[@]}"; do
+      printf "\r  ${MAGENTA}${x}${NC} ${CYAN}◆${NC} ${WHITE}%-34s${NC} ${BLUE}running...${NC}" "$msg"
+      sleep 0.08
+      kill -0 "$pid" 2>/dev/null || break
+    done
+  done
+  wait "$pid"; local rc=$?
+  if [ "$rc" -eq 0 ]; then
+    printf "\r  ${BLUE}●${NC} ${WHITE}%-34s${NC} ${BLUE}DONE${NC}\n" "$msg"
+  else
+    printf "\r  ${RED}●${NC} ${WHITE}%-34s${NC} ${RED}FAILED${NC}\n" "$msg"
+  fi
+  return "$rc"
+}
 
 clear
-echo ""
-echo -e "  ${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "  ${CYAN}    SANSXML VPN STORE — AUTO INSTALL v10${NC}"
-echo -e "  ${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
+printf "\n${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+printf "        ${WHITE}SANSXML VPN STORE${NC}  ${BLUE}◆${NC}  ${WHITE}VPS INSTALLER${NC}\n"
+printf "        ${CYAN}Premium VPN Server • Automated Installation${NC}\n"
+printf "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+printf "  ${CYAN}◆${NC} ${WHITE}Starting installation...${NC} ${BLUE}Please wait${NC}\n\n"
 
-# 1. CLEANUP
-(
-  for s in ws-ssh ws-ssh-alt stunnel4 udpgw vpnbot xray zivpn; do
-    systemctl stop "$s" 2>/dev/null; systemctl disable "$s" 2>/dev/null
-    rm -f "/etc/systemd/system/${s}.service"
-  done
-  systemctl daemon-reload 2>/dev/null; systemctl reset-failed 2>/dev/null
-  fuser -k 80/tcp 8080/tcp 443/tcp 8443/tcp 7300/udp 2>/dev/null
-  pkill -f ws-ssh.py 2>/dev/null; pkill -f badvpn-udpgw 2>/dev/null
-  pkill -f vpnbot 2>/dev/null; pkill -f zivpn 2>/dev/null
-  sleep 1
-  rm -f /usr/local/bin/ws-ssh.py /usr/bin/badvpn-udpgw /usr/local/bin/badvpn-udpgw
-  rm -f /etc/stunnel/stunnel.conf /etc/stunnel/stunnel.pem
-  rm -f /root/bot.py /root/vpnbot.log /root/bot_compile.log
-  rm -f /root/vpnbot_*.json /root/vpnbot_backup.sh /etc/sansxml-backup.conf
-  rm -rf /root/vpnbot_backup
-  rm -f /root/.ssh/id_bot /root/.ssh/id_bot.pub
-  rm -f /etc/ssh/sshd_config.d/99-vpnbot.conf
-  rm -rf /tmp/badvpn /etc/sansxml-* /etc/motd.d
-  rm -f /etc/issue /etc/issue.net /etc/motd
-  for u in $(awk -F: '$3>=1000 && $3<60000 {print $1}' /etc/passwd); do
-    pkill -9 -u "$u" 2>/dev/null; userdel -r "$u" 2>/dev/null
-  done
-  mkdir -p /root/.ssh; chmod 700 /root/.ssh
-  > /root/.ssh/authorized_keys; chmod 600 /root/.ssh/authorized_keys
-  cat > /root/.bashrc << 'RCEOF'
-case $- in *i*) ;; *) return;; esac
-HISTCONTROL=ignoreboth
-shopt -s histappend
-HISTSIZE=1000; HISTFILESIZE=2000
-[ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
-if [ -z "${debian_chroot:-}" ] && [ -r /etc/debian_chroot ]; then debian_chroot=$(cat /etc/debian_chroot); fi
-case "$TERM" in xterm-color|*-256color) color_prompt=yes;; esac
-if [ "$color_prompt" = yes ]; then
-    PS1='${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
-else
-    PS1='${debian_chroot:+($debian_chroot)}\u@\h:\w\$ '
-fi
-alias ll='ls -alF'; alias la='ls -A'; alias l='ls -CF'
-RCEOF
-  crontab -r 2>/dev/null
-  ufw --force disable >/dev/null 2>&1; ufw --force reset >/dev/null 2>&1
-  iptables -F 2>/dev/null; iptables -X 2>/dev/null
-  iptables -t nat -F 2>/dev/null; iptables -t nat -X 2>/dev/null
-) & spin $! "Bersihkan VPS"
+# 1. DEPENDENCIES
 
-# 2. DEPENDENCIES
-echo ""
-echo -e "  ${YELLOW}▸ Install dependencies${NC}"
 ( apt-get update -y >/dev/null 2>&1 ) & spin $! "Update repository"
-( apt-get install -y python3 python3-pip python3-venv sshpass curl wget unzip stunnel4 net-tools cron ufw iptables openssl cmake build-essential git pkg-config bc jq who procps dnsutils vnstat uuid-runtime socat >/dev/null 2>&1 ) & spin $! "Install packages"
+_pkg_install(){
+  dpkg --configure -a >/dev/null 2>&1 || true
+  apt-get -f install -y >/dev/null 2>&1 || true
+  apt-get install -y --no-install-recommends python3 python3-pip python3-venv sshpass curl wget unzip stunnel4 dropbear haproxy nginx net-tools cron ufw iptables openssl cmake build-essential git pkg-config bc procps dnsutils vnstat uuid-runtime socat >/tmp/sansxml-apt-install.log 2>&1
+}
+_pkg_install & _pkg_pid=$!
+spin $_pkg_pid "Install packages" || {
+  echo -e "  ${RED}PACKAGE ERROR${NC}"
+  tail -n 12 /tmp/sansxml-apt-install.log 2>/dev/null | sed 's/^/  /'
+  exit 1
+}
 ( pip3 install --break-system-packages --upgrade "python-telegram-bot>=21.5" requests qrcode pillow >/dev/null 2>&1 \
     || pip3 install --upgrade "python-telegram-bot>=21.5" requests qrcode pillow >/dev/null 2>&1 ) & spin $! "Install Telegram API"
+( mkdir -p /etc/dropbear
+  if [ -f /etc/default/dropbear ]; then
+    sed -i 's/^NO_START=.*/NO_START=0/' /etc/default/dropbear
+    sed -i 's/^DROPBEAR_PORT=.*/DROPBEAR_PORT=109/' /etc/default/dropbear
+    grep -q '^DROPBEAR_PORT=' /etc/default/dropbear || echo 'DROPBEAR_PORT=109' >> /etc/default/dropbear
+    sed -i 's/^DROPBEAR_EXTRA_ARGS=.*/DROPBEAR_EXTRA_ARGS="-p 109"/' /etc/default/dropbear
+  fi
+  systemctl daemon-reload >/dev/null 2>&1 || true
+) & spin $! "Install Dropbear"
+
+( cat > /etc/nginx/sites-available/sansxml << 'NGINXEOF'
+server {
+    listen 127.0.0.1:8081;
+    server_name _;
+    location / {
+        return 200 "SANSXML VPN STORE";
+        add_header Content-Type text/plain;
+    }
+}
+NGINXEOF
+  rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+  ln -sf /etc/nginx/sites-available/sansxml /etc/nginx/sites-enabled/sansxml
+  nginx -t >/dev/null 2>&1
+) & spin $! "Install Nginx"
+
+( cat > /etc/haproxy/haproxy.cfg << 'HAPROXYEOF'
+global
+    log /dev/log local0
+    log /dev/log local1 notice
+    daemon
+
+defaults
+    mode tcp
+    timeout connect 5s
+    timeout client 30s
+    timeout server 30s
+
+frontend sansxml_frontend
+    bind 127.0.0.1:8082
+    default_backend sansxml_backend
+
+backend sansxml_backend
+    mode tcp
+    server nginx 127.0.0.1:8081 check
+HAPROXYEOF
+  haproxy -c -f /etc/haproxy/haproxy.cfg >/dev/null 2>&1
+) & spin $! "Install HAProxy"
+
 ( mkdir -p /root/.ssh; chmod 700 /root/.ssh
   [ ! -f /root/.ssh/id_bot ] && ssh-keygen -t ed25519 -f /root/.ssh/id_bot -N "" -q
   cat /root/.ssh/id_bot.pub >> /root/.ssh/authorized_keys
@@ -76,7 +102,6 @@ echo -e "  ${YELLOW}▸ Install dependencies${NC}"
 
 # 3. VPN SERVICES
 echo ""
-echo -e "  ${YELLOW}▸ Install VPN services${NC}"
 
 ( cat > /usr/local/bin/ws-ssh.py << 'WSEOF'
 #!/usr/bin/env python3
@@ -169,16 +194,27 @@ cert = /etc/stunnel/stunnel.pem
 EOF
   sed -i 's/^ENABLED=.*/ENABLED=1/' /etc/default/stunnel4 2>/dev/null || echo "ENABLED=1" >> /etc/default/stunnel4 ) & spin $! "Install stunnel SSL"
 
-( rm -rf /tmp/badvpn
-  git clone --depth=1 https://github.com/ambrop72/badvpn.git /tmp/badvpn 2>/dev/null
+(
+  systemctl stop udpgw 2>/dev/null || true
+  rm -rf /tmp/badvpn
+  git clone --depth=1 https://github.com/ambrop72/badvpn.git /tmp/badvpn >/dev/null 2>&1
   if [ -d /tmp/badvpn ]; then
     mkdir -p /tmp/badvpn/build && cd /tmp/badvpn/build
     cmake .. -DBUILD_NOTHING_BY_DEFAULT=1 -DBUILD_UDPGW=1 >/dev/null 2>&1
     make -j"$(nproc)" >/dev/null 2>&1
-    [ -f udpgw/badvpn-udpgw ] && cp udpgw/badvpn-udpgw /usr/bin/
+    if [ -f udpgw/badvpn-udpgw ]; then
+      install -m 755 udpgw/badvpn-udpgw /tmp/badvpn-udpgw.new
+      mv -f /tmp/badvpn-udpgw.new /usr/bin/badvpn-udpgw
+    else
+      echo "BadVPN UDPGW binary tidak ditemukan setelah compile" >&2
+      exit 1
+    fi
     cd /root && rm -rf /tmp/badvpn
+  else
+    echo "Gagal download source BadVPN" >&2
+    exit 1
   fi
-  [ -f /usr/bin/badvpn-udpgw ] && cat > /etc/systemd/system/udpgw.service << 'EOF'
+  cat > /etc/systemd/system/udpgw.service << 'EOF'
 [Unit]
 Description=UDPGW
 After=network.target
@@ -189,63 +225,126 @@ Restart=always
 [Install]
 WantedBy=multi-user.target
 EOF
-) & spin $! "Compile BadVPN UDPGW"
+  systemctl daemon-reload
+  systemctl enable udpgw >/dev/null 2>&1
+  systemctl restart udpgw
+) & spin $! "Install UDPGW"
 
 ( ufw default allow incoming >/dev/null 2>&1
   ufw default allow outgoing >/dev/null 2>&1
-  for p in 22 80 443 8080 8443 10001 10002 10003 10004 10005 10006 10007; do ufw allow $p/tcp >/dev/null 2>&1; done
+  for p in 22 80 443 8080 8443 8444 8445 10001 10002 10003 10004 10005 10006 10007; do ufw allow $p/tcp >/dev/null 2>&1; done
   ufw allow 7300/udp >/dev/null 2>&1; ufw allow 1:65535/udp >/dev/null 2>&1
   ufw --force enable >/dev/null 2>&1 ) & spin $! "Configure firewall"
 
 ( systemctl daemon-reload
-  systemctl enable ws-ssh ws-ssh-alt stunnel4 >/dev/null 2>&1
-  systemctl restart ws-ssh ws-ssh-alt stunnel4
+  systemctl enable ws-ssh ws-ssh-alt stunnel4 dropbear nginx haproxy >/dev/null 2>&1
+  systemctl restart ws-ssh ws-ssh-alt stunnel4 dropbear nginx haproxy
   [ -f /usr/bin/badvpn-udpgw ] && systemctl enable udpgw >/dev/null 2>&1 && systemctl restart udpgw
   sleep 2 ) & spin $! "Start VPN services"
 
-# 4. INSTALL XRAY
+DOMAIN="sgivip.naaofficial.web.id"
+
+# 4. VPN CORE
 echo ""
-echo -e "  ${YELLOW}▸ Install Xray${NC}"
 (
-  if [ ! -f /usr/local/bin/xray ]; then
-    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install >/dev/null 2>&1
+  set -e
+  if ! command -v xray >/dev/null 2>&1; then
+    bash -c "$(curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
   fi
-  systemctl enable xray >/dev/null 2>&1
   systemctl stop xray 2>/dev/null || true
+  systemctl enable xray >/dev/null 2>&1 || true
   mkdir -p /etc/xray/accounts /var/lib/xray
-  [ ! -f /etc/xray/cert.pem ] && openssl req -x509 -newkey rsa:2048 -nodes \
-    -keyout /etc/xray/cert.key -out /etc/xray/cert.pem \
-    -days 3650 -subj "/CN=sansxml.local" 2>/dev/null
-  cat > /etc/xray/config.json << 'XRAYEOF'
+  # TLS certificate: try Let's Encrypt first; fallback to a local certificate.
+  if command -v certbot >/dev/null 2>&1; then :; else apt-get install -y certbot >/dev/null 2>&1 || true; fi
+  systemctl stop ws-ssh ws-ssh-alt stunnel4 2>/dev/null || true
+  if [ -n "${DOMAIN:-}" ] && command -v certbot >/dev/null 2>&1; then
+    certbot certonly --standalone --non-interactive --agree-tos --register-unsafely-without-email -d "$DOMAIN" >/dev/null 2>&1 || true
+  fi
+  if [ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ] && [ -f "/etc/letsencrypt/live/${DOMAIN}/privkey.pem" ]; then
+    XRAY_CERT="/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"
+    XRAY_KEY="/etc/letsencrypt/live/${DOMAIN}/privkey.pem"
+  else
+    openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+      -keyout /etc/xray/cert.key -out /etc/xray/cert.pem \
+      -subj "/CN=${DOMAIN:-sansxml.local}" >/dev/null 2>&1
+    XRAY_CERT="/etc/xray/cert.pem"
+    XRAY_KEY="/etc/xray/cert.key"
+  fi
+  cat > /etc/xray/config.json << XRAYEOF
 {
-  "log": { "loglevel": "warning" },
-  "inbounds": [
+  "log":{"loglevel":"warning"},
+  "inbounds":[
+    {"tag":"vmess-ws-tls","listen":"0.0.0.0","port":8443,"protocol":"vmess","settings":{"clients":[]},"streamSettings":{"network":"ws","security":"tls","tlsSettings":{"certificates":[{"certificateFile":"${XRAY_CERT}","keyFile":"${XRAY_KEY}"}]},"wsSettings":{"path":"/vmess"}}},
     {"tag":"vmess-ws","listen":"0.0.0.0","port":10001,"protocol":"vmess","settings":{"clients":[]},"streamSettings":{"network":"ws","wsSettings":{"path":"/vmess"}}},
-    {"tag":"vmess-grpc","listen":"0.0.0.0","port":10002,"protocol":"vmess","settings":{"clients":[]},"streamSettings":{"network":"grpc","grpcSettings":{"serviceName":"vmess-grpc"}}},
+    {"tag":"vmess-grpc","listen":"0.0.0.0","port":10002,"protocol":"vmess","settings":{"clients":[]},"streamSettings":{"network":"grpc","security":"tls","tlsSettings":{"certificates":[{"certificateFile":"${XRAY_CERT}","keyFile":"${XRAY_KEY}"}]},"grpcSettings":{"serviceName":"vmess-grpc"}}},
+    {"tag":"vless-ws-tls","listen":"0.0.0.0","port":8444,"protocol":"vless","settings":{"clients":[],"decryption":"none"},"streamSettings":{"network":"ws","security":"tls","tlsSettings":{"certificates":[{"certificateFile":"${XRAY_CERT}","keyFile":"${XRAY_KEY}"}]},"wsSettings":{"path":"/vless"}}},
     {"tag":"vless-ws","listen":"0.0.0.0","port":10003,"protocol":"vless","settings":{"clients":[],"decryption":"none"},"streamSettings":{"network":"ws","wsSettings":{"path":"/vless"}}},
-    {"tag":"vless-grpc","listen":"0.0.0.0","port":10004,"protocol":"vless","settings":{"clients":[],"decryption":"none"},"streamSettings":{"network":"grpc","grpcSettings":{"serviceName":"vless-grpc"}}},
-    {"tag":"trojan-tcp","listen":"0.0.0.0","port":10005,"protocol":"trojan","settings":{"clients":[]},"streamSettings":{"network":"tcp"}},
-    {"tag":"trojan-ws","listen":"0.0.0.0","port":10006,"protocol":"trojan","settings":{"clients":[]},"streamSettings":{"network":"ws","wsSettings":{"path":"/trojan"}}},
-    {"tag":"trojan-grpc","listen":"0.0.0.0","port":10007,"protocol":"trojan","settings":{"clients":[]},"streamSettings":{"network":"grpc","grpcSettings":{"serviceName":"trojan-grpc"}}}
+    {"tag":"vless-grpc","listen":"0.0.0.0","port":10004,"protocol":"vless","settings":{"clients":[],"decryption":"none"},"streamSettings":{"network":"grpc","security":"tls","tlsSettings":{"certificates":[{"certificateFile":"${XRAY_CERT}","keyFile":"${XRAY_KEY}"}]},"grpcSettings":{"serviceName":"vless-grpc"}}},
+    {"tag":"trojan-tcp","listen":"0.0.0.0","port":10005,"protocol":"trojan","settings":{"clients":[]},"streamSettings":{"network":"tcp","security":"tls","tlsSettings":{"certificates":[{"certificateFile":"${XRAY_CERT}","keyFile":"${XRAY_KEY}"}]}}},
+    {"tag":"trojan-ws","listen":"0.0.0.0","port":8445,"protocol":"trojan","settings":{"clients":[]},"streamSettings":{"network":"ws","security":"tls","tlsSettings":{"certificates":[{"certificateFile":"${XRAY_CERT}","keyFile":"${XRAY_KEY}"}]},"wsSettings":{"path":"/trojan"}}},
+    {"tag":"trojan-grpc","listen":"0.0.0.0","port":10007,"protocol":"trojan","settings":{"clients":[]},"streamSettings":{"network":"grpc","security":"tls","tlsSettings":{"certificates":[{"certificateFile":"${XRAY_CERT}","keyFile":"${XRAY_KEY}"}]},"grpcSettings":{"serviceName":"trojan-grpc"}}}
   ],
-  "outbounds": [
-    {"protocol":"freedom","tag":"direct"},
-    {"protocol":"blackhole","tag":"blocked"}
-  ]
+  "outbounds":[{"protocol":"freedom","tag":"direct"}]
 }
 XRAYEOF
   echo '{"protocol":"vmess","accounts":[]}' > /etc/xray/accounts/vmess.json
   echo '{"protocol":"vless","accounts":[]}' > /etc/xray/accounts/vless.json
   echo '{"protocol":"trojan","accounts":[]}' > /etc/xray/accounts/trojan.json
+
+  # Validate the Xray configuration before creating/starting the service.
   xray run -test -config /etc/xray/config.json >/dev/null 2>&1
-  systemctl restart xray
+
+  # Always create our own systemd unit so the installer does not depend on
+  # the upstream installer having created xray.service.
+  XRAY_BIN="$(command -v xray)"
+  if [ -z "$XRAY_BIN" ] || [ ! -x "$XRAY_BIN" ]; then
+    echo "Xray binary not found" >&2
+    exit 1
+  fi
+  cat > /etc/systemd/system/xray.service << XRAYSVC
+[Unit]
+Description=Xray Service
+Documentation=https://github.com/XTLS/Xray-core
+After=network.target nss-lookup.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=${XRAY_BIN} run -config /etc/xray/config.json
+Restart=on-failure
+RestartSec=3
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
+XRAYSVC
+
+  systemctl daemon-reload
+  systemctl unmask xray.service 2>/dev/null || true
+  systemctl enable xray.service
+  systemctl restart xray.service
   sleep 2
-) & spin $! "Install Xray"
+
+  # Do not continue to bot setup unless Xray is really running.
+  if ! systemctl is-active --quiet xray.service; then
+    echo "" >&2
+    echo "❌ Xray gagal berjalan sebagai systemd service." >&2
+    systemctl --no-pager --full status xray.service >&2 || true
+    echo "--- journalctl xray.service ---" >&2
+    journalctl -u xray.service -n 40 --no-pager >&2 || true
+    exit 1
+  fi
+  systemctl is-enabled --quiet xray.service
+) & spin $! "Install Core VPN"
+
+# Restore SSH/WS/SSL services after certificate setup
+( systemctl daemon-reload; systemctl enable ws-ssh ws-ssh-alt stunnel4 >/dev/null 2>&1; systemctl restart ws-ssh ws-ssh-alt stunnel4 ) & spin $! "Start SSH/SSL services"
 
 # 5. BANNER
 rm -rf /etc/update-motd.d/* 2>/dev/null
 cat > /etc/issue.net << 'BANEOF'
-<br><font color="#ff00aa"><b>                        ▬▬▬▬▬▬ஜ۩۞۩ஜ▬▬▬▬▬▬</b></font><br><font color="#ffffff"><b>                          --- 卐 </b></font><font color="#ffff00"><b>SANSXML VPN STORE</b></font><font color="#ffffff"><b> 卐 ---</b></font><br><font color="#ff00aa"><b>                        ▬▬▬▬▬▬ஜ۩۞۩ஜ▬▬▬▬▬▬</b></font><br><font color="#ffffff"><b>                            ── PREMIUM VPN SERVER ──</b></font><br><font color="#ffffff"><b>                             --- 卍 TERM OF SERVICE 卐 ---</b></font><br><font color="#ffffff"><b>                                      NO MULTI LOGIN !!</b></font><br><font color="#ffffff"><b>                                NO HACKING AND CARDING</b></font><br><font color="#ffff00"><b>                            👉 MULTI LOGIN BANNED 👈</b></font><br><font color="#ff00aa"><b>                        ▬▬▬▬▬▬ஜ۩۞۩ஜ▬▬▬▬▬▬</b></font><br><font color="#ffffff"><b>                    ORDER CONFIG PREMIUM: </b></font><font color="#00ff44"><b>wa.me/6289527419748</b></font><br><font color="#ffffff"><b>                         BOT ORDER VPN: </b></font><font color="#00ff44"><b>t.me/unokwn</b></font><br><br>
+<br><font color="#ff00aa"><b>                        ▬▬▬▬▬▬ஜ۩۞۩ஜ▬▬▬▬▬▬</b></font><br><font color="#ffffff"><b>                         --- 卐 </b></font><font color="#ffff00"><b>SANSXML VPN STORE</b></font><font color="#ffffff"><b> 卐 ---</b></font><br><font color="#ff00aa"><b>                        ▬▬▬▬▬▬ஜ۩۞۩ஜ▬▬▬▬▬▬</b></font><br><font color="#ffffff"><b>                              卍 TERM OF SERVICE 卐</b></font><br><font color="#ffffff"><b>                                  PREMIUM VPN</b></font><br><font color="#ffffff"><b>                                NO MULTI LOGIN !!</b></font><br><font color="#ffffff"><b>                           NO HACKING AND CARDING</b></font><br><font color="#ffff00"><b>                              👉 MULTI LOGIN BANNED 👈</b></font><br><font color="#ff00aa"><b>                        ▬▬▬▬▬▬ஜ۩۞۩ஜ▬▬▬▬▬▬</b></font><br><font color="#ffffff"><b>                   ORDER CONFIG PREMIUM: </b></font><font color="#00ff44"><b>wa.me/6289527419748</b></font><br><font color="#ffffff"><b>                         BOT ORDER VPN: </b></font><font color="#00ff44"><b>t.me/unokwn</b></font><br><br>
 BANEOF
 cp /etc/issue.net /etc/motd
 sed -i '/^[[:space:]]*ListenAddress/d' /etc/ssh/sshd_config
@@ -267,11 +366,9 @@ SSHEOF
 systemctl restart ssh 2>/dev/null || systemctl restart sshd
 
 # 6. BOT CONFIG
-echo ""
-echo -e "  ${YELLOW}▸ Konfigurasi Bot${NC}"
-echo ""
+# Token Telegram sengaja dikosongkan saat instalasi.
+# Token hanya diisi melalui menu [05] ADD TOKEN BOT.
 BOT_TOKEN=""
-if [ -z "$BOT_TOKEN" ]; then echo -e "  ${RED}❌ Token tidak boleh kosong${NC}"; exit 1; fi
 
 GH_USER="Syahrul7y"; GH_REPO="Backup"
 GH_EMAIL="hodamkecil@gmail.com"
@@ -304,18 +401,19 @@ CFGEOF
 
 # 7. BOT.PY
 echo ""
-echo -e "  ${YELLOW}▸ Install Bot.py${NC}"
+echo -e "\n  ${BLUE}BOT ENGINE${NC} ${CYAN}◆${NC}"
+echo -e "  ${CYAN}▸${NC} ${WHITE}Install Bot.py${NC}"
 
 cat > /root/bot.py << 'BOTPYEOF'
 #!/usr/bin/env python3
 import re, io, json, os, logging, subprocess, asyncio, base64, random, string, socket, shutil, time, uuid
 from datetime import datetime, timedelta
-from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand, ReplyKeyboardRemove, InputFile
+from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 
 CONFIG_FILE = "/root/vpnbot_config.json"
 def load_config():
-    d = {"bot_token":"","domain":"","owner_ids":[6144358600],"servers":{},"ip_limit":2,"block_hours":2,"hc_api_key":""}
+    d = {"bot_token":"","domain":"","owner_ids":[6144358600],"servers":{},"ip_limit":2,"block_hours":2}
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE) as f: c = json.load(f)
@@ -343,8 +441,7 @@ USERS_FILE="/root/vpnbot_users.json"; BAL_FILE="/root/vpnbot_balance.json"
 ACCOUNTS_FILE="/root/vpnbot_accounts.json"; TRIAL_FILE="/root/vpnbot_trial.json"
 TRX_FILE="/root/vpnbot_trx.json"
 XRAY_CONFIG = "/etc/xray/config.json"
-HC_API_KEY = CONFIG.get("hc_api_key", "")
-XRAY_PORTS = {"vmess_ws":10001,"vmess_grpc":10002,"vless_ws":10003,"vless_grpc":10004,"trojan_tcp":10005,"trojan_ws":10006,"trojan_grpc":10007}
+XRAY_PORTS = {"vmess_ws":10001,"vmess_tls":8443,"vmess_grpc":10002,"vless_ws":10003,"vless_tls":8444,"vless_grpc":10004,"trojan_tcp":10005,"trojan_ws":8445,"trojan_grpc":10007}
 
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO,
     handlers=[logging.StreamHandler(), logging.FileHandler("/root/vpnbot.log", encoding="utf-8")])
@@ -520,7 +617,7 @@ def xray_build_vmess(host, port, u, path, tls, remark):
            "tls":"tls" if tls else "","sni":host if tls else ""}
     return "vmess://" + base64.b64encode(json.dumps(cfg).encode()).decode()
 def xray_build_vmess_grpc(host, u, svc, remark):
-    cfg = {"v":"2","ps":remark,"add":host,"port":"443","id":u,"aid":"0","scy":"auto",
+    cfg = {"v":"2","ps":remark,"add":host,"port":str(XRAY_PORTS["vmess_grpc"]),"id":u,"aid":"0","scy":"auto",
            "net":"grpc","type":"gun","host":host,"path":svc,"tls":"tls","sni":host}
     return "vmess://" + base64.b64encode(json.dumps(cfg).encode()).decode()
 def xray_build_vless(host, port, u, path, tls, remark):
@@ -537,7 +634,7 @@ def xray_build_trojan(host, port, pwd, path, tls, remark):
     return f"trojan://{pwd}@{host}:{port}?{p}#{remark}"
 def xray_build_trojan_grpc(host, pwd, svc, remark):
     p = f"security=tls&type=grpc&serviceName={svc}&sni={host}"
-    return f"trojan://{pwd}@{host}:443?{p}#{remark}"
+    return f"trojan://{pwd}@{host}:{XRAY_PORTS['trojan_grpc']}?{p}#{remark}"
 
 # SSH
 def ssh_create(u, p, days, is_trial=False, key="sg_1ip"):
@@ -548,8 +645,9 @@ def ssh_create(u, p, days, is_trial=False, key="sg_1ip"):
         exp_date = (now + timedelta(days=days)).date(); exp_ts = exp_date.strftime("%Y-%m-%d") + " 23:59:59"
     exp = exp_date.strftime("%Y-%m-%d")
     pw_b64 = base64.b64encode(p.encode()).decode()
+    expiry_cmd = f"chage -E '{exp}' {u} 2>&1 ;" if not is_trial else ""
     cmd = (f"userdel -r {u} 2>/dev/null; useradd -m -s /bin/bash {u} 2>&1 ; "
-           f"chage -E '{exp}' {u} 2>&1 ; chage -M 99999 {u} 2>&1 ; chage -I -1 {u} 2>&1 ; "
+           f"{expiry_cmd} chage -M 99999 {u} 2>&1 ; chage -I -1 {u} 2>&1 ; "
            f"PW=$(echo '{pw_b64}' | base64 -d) ; printf '%s:%s\\n' '{u}' \"$PW\" | chpasswd 2>&1 ; "
            f"passwd -u {u} 2>&1 ; usermod -U {u} 2>&1 ; echo DONE:$?")
     c,o,e = ssh_run(cmd, key)
@@ -704,7 +802,7 @@ def backup_config_text():
     c = load_backup_conf(); g = c.get("GH_TOKEN","") or ""
     t = f"{g[:4]}{'*'*(len(g)-8)}{g[-4:]}" if len(g)>12 else ("*"*len(g) if g else "(kosong)")
     st = "✅ Aktif" if is_backup_ready() else "❌ Belum diisi"
-    return "\n".join(["<blockquote>","🔄 <b>PENGATURAN BACKUP GITHUB</b>","───────────────────────",
+    return "\n".join(["<blockquote>","🔄 <b>BACKUP</b>","───────────────────────",
              f"├ Status   : <b>{st}</b>",f"├ Username : <code>{c.get('GH_USER','-')}</code>",
              f"├ Repo     : <code>{c.get('GH_REPO','-')}</code>",
              f"├ Email    : <code>{c.get('GH_EMAIL','-')}</code>",
@@ -857,28 +955,11 @@ def reset_backup(keep=True):
 # KEYBOARDS
 def kb_dash(uid):
     rows = [[B("➕  BUAT AKUN","buat_akun",style="primary"),B("⌛  TRIAL AKUN","trial_akun",style="primary")],
-        [B("♻️ PERPANJANG AKUN","perpanjang_akun",style="primary")],
+        [B("🔄 PERPANJANG AKUN","perpanjang_akun",style="primary")],
         [B("🏦 SALDO","isi_saldo",style="primary"),B("📁 AKUN SAYA","my_accs",style="primary")],
-        [B("🧩 BUAT CONFIG","buat_config",style="primary")],
-        [B("🔄 REFRESH","refresh",style="primary")],
-        [B("⚙️ PENGATURAN","admin|menu",style="primary")]]
+        [B("♻️ REFRESH","refresh",style="primary")]]
+    rows.append([B("⚙️ PENGATURAN","admin|menu",style="danger")])
     return InlineKeyboardMarkup(rows)
-
-def kb_config_menu():
-    return InlineKeyboardMarkup([
-        [B("➕ HTTP CUSTOM","hc_menu",style="primary")],
-        [B("🔙 KEMBALI","menu|main",style="danger")]])
-
-def kb_hc_protocols():
-    return InlineKeyboardMarkup([
-        [B("➕ SSH OVPN","hc_proto|ssh",style="primary")],
-        [B("➕ VMESS","hc_proto|vmess",style="primary"),B("➕ VLESS","hc_proto|vless",style="primary"),B("➕ TROJAN","hc_proto|trojan",style="primary")],
-        [B("🔙 KEMBALI","buat_config",style="danger")]])
-
-def kb_hc_ssh():
-    return InlineKeyboardMarkup([
-        [B("AXIS WA V1","hc_axis",style="primary")],
-        [B("🔙 KEMBALI","hc_menu",style="danger")]])
 def kb_saldo():
     return InlineKeyboardMarkup([
         [B("1","saldo_num|1",style="primary"),B("2","saldo_num|2",style="primary"),B("3","saldo_num|3",style="primary")],
@@ -933,7 +1014,7 @@ def kb_xray_srv(proto):
 def kb_admin():
     return InlineKeyboardMarkup([
         [B("⚙️ Kelola VPN","admin|srv",style="primary"),B("👤 Pengguna","admin|users|0",style="primary")],
-        [B("📢 Broadcast","admin|bc",style="primary"),B("💾 BACKUP","admin|backup",style="primary")],
+        [B("📢 Broadcast","admin|bc",style="primary"),B("🔄 Backup","admin|backup",style="primary")],
         [B("💻 VPS","admin|vps",style="primary")],
         [B("🔙 Kembali","menu|main",style="danger")]])
 def kb_backup():
@@ -987,116 +1068,132 @@ def xray_server_text(proto):
     lines += ["─────────────────────────","</blockquote>"]
     return "\n".join(lines)
 def saldo_text(uid, nom=""):
-    return (f"<blockquote>💰 <b>MASUKKAN JUMLAH NOMINAL TOPUP SALDO</b>\n"
-            f"────────────────────────────────\n"
+    return (f"<blockquote>💰 <b>Masukkan jumlah nominal topup saldo</b>\n\n"
             f"Jumlah saldo VPN saat ini: <b>{rupiah(get_bal(uid))}</b>\n\n"
             f"Nominal input: <b>{rupiah(nom) if nom else 'Rp 0'}</b>\n"
-            f"Minimal topup {rupiah(MIN_TOPUP)}\n"
-            f"</blockquote>")
+            f"Minimal topup {rupiah(MIN_TOPUP)}\n\n"
+            f"❖ <i>Saldo dapat digunakan untuk membuat akun VPN</i> ❖\n</blockquote>")
 
-def config_name_text():
-    return ("<blockquote>🌐 <b>KETIK NAMA FILE CONFIG</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━━━\n"
-            "Contoh: <code>axis wa</code>, dll.\n\n"
-            "Ketik /batal untuk membatalkan</blockquote>")
-
-def config_ssh_text():
-    return ("<blockquote>🔐 <b>KIRIMKAN DETAIL AKUN SSH OVPN</b>\n"
-            "━━━━━━━━━━━━━━━━━━━━━━━━━\n"
-            "Format: <code>host:port@user:pass</code></blockquote>")
-
-def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="sg_1ip"):
+def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="sg_1ip", exp_ts="", created_at=""):
     srv = SERVERS.get(server_key, {})
     head = "TRIAL" if is_trial else ("MANUAL" if manual else "PREMIUM")
     BULAN = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"]
     try:
         ed = datetime.strptime(exp,"%Y-%m-%d")
         exp_fmt = f"{ed.day} {BULAN[ed.month-1]}, {ed.year}"
-        try: di = int(dl.split()[0])
-        except: di = 30
-        cr = datetime.now() - timedelta(days=di)
-        created_fmt = f"{cr.day} {BULAN[cr.month-1]}, {cr.year}"
+        try:
+            cr = datetime.fromisoformat(created_at) if created_at else datetime.now()
+        except:
+            cr = datetime.now()
+        created_fmt = f"{cr.day} {BULAN[cr.month-1]}, {cr.year}" + (f" {cr:%H:%M}" if is_trial else "")
+        if is_trial and exp_ts:
+            try:
+                et = datetime.strptime(exp_ts, "%Y-%m-%d %H:%M:%S")
+                exp_fmt = f"{et.day} {BULAN[et.month-1]}, {et.year} {et:%H:%M}"
+            except: pass
     except: exp_fmt = exp; created_fmt = "-"
     ssh_ovpn_val = srv.get("ssh_ovpn") or srv.get("name","SG NEWMEDIA")
     host = srv.get("domain") or SSH_HOST
     quota = srv.get("quota_gb", 700) or 700
     payload_ws = "GET /cdn-cgi/trace HTTP/1.1[crlf]Host: [host][crlf][crlf]GET-RAY / HTTP/1.1[crlf]Host: [host][crlf]Connection: Upgrade[crlf]User-Agent: [ua][crlf]Upgrade: websocket[crlf][crlf]"
     payload_tls = "GET / HTTP/1.1[crlf]Host: [host][crlf]User-Agent: [ua][crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf][crlf]"
-    ssl_link = f"{host}:443@{u}:{p}"
-    ws_link = f"{host}:80@{u}:{p}"
-    udp_link = f"{host}:1-65535@{u}:{p}"
-    L = ["◤ <b>SSH OVPN ACCOUNT</b> ◢",
-         f"     ❖ <b>{head}</b> ❖", "━━━━━━━━━━━━━━━━━━━━━━━", "", "",
-         f"City       : {srv.get('city','Singapore')}",
-         f"ISP        : {srv.get('isp','DigitalOcean LLC')}",
-         f"SSH OVPN   : {ssh_ovpn_val}",
-         f"Username   : {u}",
-         f"Password   : {p}",
-         f"Qouta      : {quota} GB",
-         f"Limit IP   : {ip} IP", "", "",
-         "━━━━━━━━━━━━━━━━━━━━━━━", "", "",
-         f"Host     : {host}",
-         "OpenSSH  : 443, 80, 22", "Dropbear : 443, 109",
-         "SSH WS   : 80, 8080, 8081-9999", "SSH SSL  : 443", "SSH UDP  : 1-65535",
-         "OVPN     : 443, 1194, 2200", "BadVPN   : 7100, 7300",
-         "━━━━━━━━━━━━━━━━━━━━━━━",
-         f"SSL : {ssl_link}", "", f"WS  : {ws_link}", "", f"UDP : {udp_link}",
-         "━━━━━━━━━━━━━━━━━━━━━━━",
-         "PAYLOAD WS", payload_ws, "", "PAYLOAD TLS", payload_tls,
-         "━━━━━━━━━━━━━━━━━━━━━━━",
-         f"Durasi   : {dl}", f"Dibuat   : {created_fmt}", f"Berakhir : {exp_fmt}", "",
-         "━━━━━━━━━━━━━━━━━━━━━━━",
-         "<b>      ◤ SANSXML VPN STORE ◢</b>",
-         "<i>❖ Terima kasih telah menggunakan layanan kami ❖</i>"]
+    esc = lambda x: str(x).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
+    L = [
+        f"┌────────────────────────",
+        f"│   <b>♨️ SSH OVPN ACCOUNT {head} ♨️</b>",
+        f"└────────────────────────", "",
+        f"┌────────────────────────",
+        f"│ <b>City</b>       : {esc(srv.get('city','Singapore'))}",
+        f"│ <b>ISP</b>        : {esc(srv.get('isp','DigitalOcean LLC'))}",
+        f"│ <b>SSH OVPN</b>   : {esc(ssh_ovpn_val)}",
+        f"│ <b>Username</b>   : {esc(u)}",
+        f"│ <b>Password</b>   : {esc(p)}",
+        f"│ <b>Qouta</b>      : {quota} GB",
+        f"│ <b>Limit IP</b>   : {ip} IP",
+        f"└────────────────────────", "",
+        f"┌────────────────────────",
+        f"│ <b>Host</b>       : {esc(host)}",
+        f"│ <b>OpenSSH</b>    : 443, 80, 22",
+        f"│ <b>Dropbear</b>   : 443, 109",
+        f"│ <b>SSH WS</b>     : 80, 8080, 8081-9999",
+        f"│ <b>SSH SSL</b>    : 443",
+        f"│ <b>SSH UDP</b>    : 1-65535",
+        f"│ <b>OVPN</b>       : 443, 1194, 2200",
+        f"│ <b>BadVPN</b>     : 7100, 7300",
+        f"└────────────────────────", "",
+        "──────────────────────────",
+        f"🔐 <b>SSH WS</b>  : {esc(host)}:80@{esc(u)}:{esc(p)}",
+        f"🔐 <b>SSH TLS</b> : {esc(host)}:443@{esc(u)}:{esc(p)}",
+        f"🔐 <b>SSH UDP</b> : {esc(host)}:1-65535@{esc(u)}:{esc(p)}", "",
+        f"🧩 <b>PAYLOAD WS</b> : {esc(payload_ws)}", "",
+        f"🧩 <b>PAYLOAD TLS</b> : {esc(payload_tls)}", "",
+        f"┌────────────────────────",
+        f"│ <b>Durasi</b>    : {esc(dl)}",
+        f"│ <b>Dibuat</b>    : {created_fmt}",
+        f"│ <b>Berakhir</b>  : {exp_fmt}",
+        f"└────────────────────────", "",
+        f"🛍️ <b>SANSXML VPN STORE</b>", "",
+        f"✨ <b>TERIMAKASIH TELAH MENGGUNAKAN",
+        f"LAYANAN KAMI</b> ✨"
+    ]
     return "\n".join(L)
-def xray_caption(proto, un, pw, cred, exp, days, sk, is_trial=False):
-    s = SERVERS.get(sk,{}); host = s.get("domain") or SSH_HOST
+
+def xray_caption(proto, un, pw, cred, exp, days, sk, is_trial=False, exp_ts="", created_at=""):
+    s = SERVERS.get(sk,{})
+    host = s.get("domain") or SSH_HOST
     city = s.get("city","Singapore"); isp = s.get("isp","DigitalOcean LLC")
     ssh_ovpn = s.get("ssh_ovpn") or s.get("name","SG NEWMEDIA")
-    quota = s.get("quota_gb", 700) or 700
-    ip_limit = s.get("ip_limit", 1) or 1
+    quota = s.get("quota_gb",700) or 700
+    ip_limit = s.get("ip_limit",1) or 1
     BULAN = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"]
     try:
         ed = datetime.strptime(exp,"%Y-%m-%d")
         ef = f"{ed.day} {BULAN[ed.month-1]}, {ed.year}"
-        cr = datetime.now(); cf = f"{cr.day} {BULAN[cr.month-1]}, {cr.year}"
+        try:
+            cr = datetime.fromisoformat(created_at) if created_at else datetime.now()
+        except:
+            cr = datetime.now()
+        cf = f"{cr.day} {BULAN[cr.month-1]}, {cr.year}" + (f" {cr:%H:%M}" if is_trial else "")
+        if is_trial and exp_ts:
+            try:
+                et = datetime.strptime(exp_ts, "%Y-%m-%d %H:%M:%S")
+                ef = f"{et.day} {BULAN[et.month-1]}, {et.year} {et:%H:%M}"
+            except: pass
     except: ef = exp; cf = "-"
     head = {"vmess":"VMESS","vless":"VLESS","trojan":"TROJAN"}.get(proto,proto.upper())
     lbl = "TRIAL" if is_trial else "PREMIUM"
+    esc = lambda x: str(x).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
     if proto == "vmess":
-        url1 = xray_build_vmess(host,443,cred,'/vmess',True,f'{ssh_ovpn}-WSTLS')
+        url1 = xray_build_vmess(host,XRAY_PORTS['vmess_tls'],cred,'/vmess',True,f'{ssh_ovpn}-WSTLS')
         url2 = xray_build_vmess(host,XRAY_PORTS['vmess_ws'],cred,'/vmess',False,f'{ssh_ovpn}-WS')
         url3 = xray_build_vmess_grpc(host,cred,'vmess-grpc',f'{ssh_ovpn}-gRPC')
-        t1 = "── VMESS WS TLS ──"; t2 = "── VMESS WS ──"; t3 = "── VMESS gRPC TLS ──"
+        t1 = "VMESS WS TLS"; t2 = "VMESS WS"; t3 = "VMESS gRPC TLS"
+        server_lines = [f"│ <b>Host</b>       : {esc(host)}", "│ <b>Path</b>       : /vmess", "│ <b>Path gRPC</b>  : vmess-grpc", f"│ <b>WS TLS</b>     : {XRAY_PORTS['vmess_tls']}", f"│ <b>WS</b>         : {XRAY_PORTS['vmess_ws']}", f"│ <b>gRPC TLS</b>   : {XRAY_PORTS['vmess_grpc']}", f"│ <b>gRPC</b>       : {XRAY_PORTS['vmess_grpc']}"]
     elif proto == "vless":
-        url1 = xray_build_vless(host,443,cred,'/vless',True,f'{ssh_ovpn}-WSTLS')
+        url1 = xray_build_vless(host,XRAY_PORTS['vless_tls'],cred,'/vless',True,f'{ssh_ovpn}-WSTLS')
         url2 = xray_build_vless(host,XRAY_PORTS['vless_ws'],cred,'/vless',False,f'{ssh_ovpn}-WS')
         url3 = xray_build_vless_grpc(host,cred,'vless-grpc',f'{ssh_ovpn}-gRPC')
-        t1 = "── VLESS WS TLS ──"; t2 = "── VLESS WS ──"; t3 = "── VLESS gRPC TLS ──"
+        t1 = "VLESS WS TLS"; t2 = "VLESS WS"; t3 = "VLESS gRPC TLS"
+        server_lines = [f"│ <b>Host</b>       : {esc(host)}", "│ <b>Path</b>       : /vless", "│ <b>Path gRPC</b>  : vless-grpc", f"│ <b>WS TLS</b>     : {XRAY_PORTS['vless_tls']}", f"│ <b>WS</b>         : {XRAY_PORTS['vless_ws']}", f"│ <b>gRPC TLS</b>   : {XRAY_PORTS['vless_grpc']}", "│ <b>TCP TLS</b>    : 443"]
     else:
         url1 = xray_build_trojan(host,XRAY_PORTS['trojan_tcp'],cred,'',True,f'{ssh_ovpn}-TCP')
-        url2 = xray_build_trojan(host,443,cred,'/trojan',True,f'{ssh_ovpn}-WS')
+        url2 = xray_build_trojan(host,XRAY_PORTS['trojan_ws'],cred,'/trojan',True,f'{ssh_ovpn}-WS')
         url3 = xray_build_trojan_grpc(host,cred,'trojan-grpc',f'{ssh_ovpn}-gRPC')
-        t1 = "── TROJAN TCP ──"; t2 = "── TROJAN WS TLS ──"; t3 = "── TROJAN gRPC TLS ──"
-    L = [f"◤ <b>{head} ACCOUNT</b> ◢",f"     ❖ <b>{lbl}</b> ❖","━━━━━━━━━━━━━━━━━━━━━━━","",""]
-    L += [f"City       : {city}",f"ISP        : {isp}",f"SSH OVPN   : {ssh_ovpn}",f"Username   : {un}"]
-    if proto == "trojan": L += [f"Password   : {cred}"]
-    else: L += [f"Password   : {pw}",f"UUID       : {cred}"]
-    L += [f"Qouta      : {quota} GB",f"Limit IP   : {ip_limit} IP","","","━━━━━━━━━━━━━━━━━━━━━━━","",""]
-    if proto == "vmess":
-        L += [f"Host       : {host}","Path       : /vmess","Path gRPC  : vmess-grpc","WS TLS     : 443",f"WS         : {XRAY_PORTS['vmess_ws']}","gRPC TLS   : 443",f"gRPC       : {XRAY_PORTS['vmess_grpc']}"]
-    elif proto == "vless":
-        L += [f"Host       : {host}","Path       : /vless","Path gRPC  : vless-grpc","WS TLS     : 443",f"WS         : {XRAY_PORTS['vless_ws']}","gRPC TLS   : 443","TCP TLS    : 443"]
-    else:
-        L += [f"Host       : {host}",f"Trojan TCP : {XRAY_PORTS['trojan_tcp']}","Trojan WS  : 443 /trojan","Trojan gRPC: 443 trojan-grpc"]
-    L += ["","━━━━━━━━━━━━━━━━━━━━━━━","","","<b>URL CONFIGURATION</b>","",
-          f"<b>{t1}</b>",url1,"",
-          f"<b>{t2}</b>",url2,"",
-          f"<b>{t3}</b>",url3,"",
-          "━━━━━━━━━━━━━━━━━━━━━━━","",f"Durasi     : {TRIAL_DURATION_MIN} Minute" if is_trial else f"Durasi     : {days} Hari",
-          f"Dibuat     : {cf}",f"Berakhir   : {ef}","",
-          "━━━━━━━━━━━━━━━━━━━━━━━","<b>      ◤ SANSXML VPN STORE ◢</b>",
-          "<i>❖ Terima kasih telah menggunakan layanan kami ❖</i>"]
+        t1 = "TROJAN TCP"; t2 = "TROJAN WS TLS"; t3 = "TROJAN gRPC TLS"
+        server_lines = [f"│ <b>Host</b>       : {esc(host)}", f"│ <b>Trojan TCP</b> : {XRAY_PORTS['trojan_tcp']}", f"│ <b>Trojan WS</b>  : {XRAY_PORTS['trojan_ws']} /trojan", f"│ <b>Trojan gRPC</b>: {XRAY_PORTS['trojan_grpc']} trojan-grpc"]
+    password_line = f"│ <b>Password</b>   : {esc(cred if proto == 'trojan' else pw)}"
+    account_lines = [
+        f"│ <b>City</b>       : {esc(city)}", f"│ <b>ISP</b>        : {esc(isp)}", f"│ <b>SSH OVPN</b>   : {esc(ssh_ovpn)}",
+        f"│ <b>Username</b>   : {esc(un)}", password_line
+    ]
+    if proto != "trojan": account_lines.append(f"│ <b>UUID</b>       : {esc(cred)}")
+    account_lines += [f"│ <b>Qouta</b>      : {quota} GB", f"│ <b>Limit IP</b>   : {ip_limit} IP"]
+    dur = f"{TRIAL_DURATION_MIN} Minute" if is_trial else f"{days} Hari"
+    L = [f"┌────────────────────────", f"│   <b>♨️ {head} ACCOUNT {lbl} ♨️</b>", f"└────────────────────────", "",
+         "┌────────────────────────"] + account_lines + ["└────────────────────────", "", "┌────────────────────────"] + server_lines + ["└────────────────────────", "", "──────────────────────────",
+         f"🔐 <b>{esc(t1)}</b> : {esc(url1)}", f"🔐 <b>{esc(t2)}</b> : {esc(url2)}", f"🔐 <b>{esc(t3)}</b> : {esc(url3)}", "",
+         "┌────────────────────────", f"│ <b>Durasi</b>    : {esc(dur)}", f"│ <b>Dibuat</b>    : {cf}", f"│ <b>Berakhir</b>  : {ef}", "└────────────────────────", "",
+         "🛍️ <b>SANSXML VPN STORE</b>", "", "✨ <b>TERIMAKASIH TELAH MENGGUNAKAN", "LAYANAN KAMI</b> ✨"]
     return "\n".join(L)
 
 # ACTIONS
@@ -1110,8 +1207,8 @@ async def do_create(chat, uid, user, un, pw, hari, is_trial=False, sk="sg_1ip"):
             f"💵 Harga Akun : <b>{rupiah(price)}</b>\n"
             f"📉 Kurang     : <b>{rupiah(kurang)}</b>\n\n"
             "Silakan topup saldo melalui menu\n"
-            "Tombol 💰 TOPUP SALDO.</blockquote>")
-        kb = InlineKeyboardMarkup([[B("💰 TOPUP SALDO","isi_saldo",style="success")],[B("🔙 Kembali","menu|main",style="danger")]])
+            "Tombol 🏦 SALDO.</blockquote>")
+        kb = InlineKeyboardMarkup([[B("🏦 SALDO","isi_saldo",style="success")],[B("🔙 Kembali","menu|main",style="danger")]])
         await chat.send_message(msg_saldo,reply_markup=kb,parse_mode="HTML"); return
     hdr = "TRIAL" if is_trial else "PREMIUM"
     srv_num = list(SERVERS.keys()).index(sk) + 1 if sk in SERVERS else 1
@@ -1120,8 +1217,9 @@ async def do_create(chat, uid, user, un, pw, hari, is_trial=False, sk="sg_1ip"):
     if not is_trial:
         ok,_ = reduce_bal(uid,price)
         if not ok: await m.edit_text("❌ Saldo berubah.",parse_mode="HTML"); return
+    created_at = datetime.now().isoformat()
     save_acc(un,{"user_id":uid,"username":un,"password":pw,"exp":r["exp"],"exp_ts":r.get("exp_ts",""),
-        "days":hari,"limit_ip":ip,"harga":price,"created_at":datetime.now().isoformat(),
+        "days":hari,"limit_ip":ip,"harga":price,"created_at":created_at,
         "first_name":user.first_name or "","username_tg":user.username or "","manual":r.get("manual",False),
         "free_owner":is_owner(uid),"is_trial":is_trial,"server_key":sk,"server":s.get("name","SG NEWMEDIA"),
         "proto":"ssh"})
@@ -1129,7 +1227,7 @@ async def do_create(chat, uid, user, un, pw, hari, is_trial=False, sk="sg_1ip"):
         add_trx(uid,user.first_name or "User",user.username or "","buat_akun",price,f"{hari}h {s.get('name','')}")
     dl = f"{TRIAL_DURATION_MIN} Minute" if is_trial else f"{hari} Hari"
     ex = r.get("exp_ts","")[:10] if is_trial else r["exp"]
-    await m.edit_text(acc_caption(un,pw,ex,dl,ip,r.get("manual",False),is_trial,sk),parse_mode="HTML")
+    await m.edit_text(acc_caption(un,pw,ex,dl,ip,r.get("manual",False),is_trial,sk,r.get("exp_ts", ""),created_at),parse_mode="HTML")
     asyncio.create_task(sync_push_async())
 async def do_extend(chat, uid, user, un, hari, sk):
     price = get_price(hari,sk)
@@ -1140,8 +1238,8 @@ async def do_extend(chat, uid, user, un, hari, sk):
             f"💵 Harga Akun : <b>{rupiah(price)}</b>\n"
             f"📉 Kurang     : <b>{rupiah(kurang)}</b>\n\n"
             "Silakan topup saldo melalui menu\n"
-            "Tombol 💰 TOPUP SALDO.</blockquote>")
-        kb = InlineKeyboardMarkup([[B("💰 TOPUP SALDO","isi_saldo",style="success")],[B("🔙 Kembali","menu|main",style="danger")]])
+            "Tombol 🏦 SALDO.</blockquote>")
+        kb = InlineKeyboardMarkup([[B("🏦 SALDO","isi_saldo",style="success")],[B("🔙 Kembali","menu|main",style="danger")]])
         await chat.send_message(msg_saldo,reply_markup=kb,parse_mode="HTML"); return
     m = await chat.send_message(f"⚙️ Memperpanjang akun {un} selama {hari} hari...", parse_mode="HTML")
     a = get_acc(un)
@@ -1168,8 +1266,8 @@ async def do_create_xray(chat, uid, user, un, pw, hari, sk, proto, is_trial=Fals
             f"💵 Harga Akun : <b>{rupiah(price)}</b>\n"
             f"📉 Kurang     : <b>{rupiah(kurang)}</b>\n\n"
             "Silakan topup saldo melalui menu\n"
-            "Tombol 💰 TOPUP SALDO.</blockquote>")
-        kb = InlineKeyboardMarkup([[B("💰 TOPUP SALDO","isi_saldo",style="success")],[B("🔙 Kembali","menu|main",style="danger")]])
+            "Tombol 🏦 SALDO.</blockquote>")
+        kb = InlineKeyboardMarkup([[B("🏦 SALDO","isi_saldo",style="success")],[B("🔙 Kembali","menu|main",style="danger")]])
         await chat.send_message(msg_saldo,reply_markup=kb,parse_mode="HTML"); return
     hdr = 'TRIAL' if is_trial else 'PREMIUM'
     srv_num = list(SERVERS.keys()).index(sk) + 1 if sk in SERVERS else 1
@@ -1188,17 +1286,18 @@ async def do_create_xray(chat, uid, user, un, pw, hari, sk, proto, is_trial=Fals
         exp = (datetime.now()+timedelta(days=hari)).strftime("%Y-%m-%d")
         exp_ts = exp+" 23:59:59"
     key = f"{proto}_{un}"
+    created_at = datetime.now().isoformat()
     accs = load_json(ACCOUNTS_FILE,{})
     accs[key] = {"user_id":uid,"username":un,"password":pw,
         "uuid":cred if proto != "trojan" else "","proto":proto,"exp":exp,
         "exp_ts":exp_ts,"days":hari,"limit_ip":1,"harga":price,
-        "server_key":sk,"created_at":datetime.now().isoformat(),
+        "server_key":sk,"created_at":created_at,
         "first_name":user.first_name or "","username_tg":user.username or "",
         "is_trial":is_trial}
     save_json(ACCOUNTS_FILE,accs)
     if not is_trial:
         add_trx(uid,user.first_name or "User",user.username or "",f"{proto}_akun",price,f"{hari}h {s.get('name','')}")
-    await m.edit_text(xray_caption(proto,un,pw,cred,exp,hari,sk,is_trial=is_trial),parse_mode="HTML")
+    await m.edit_text(xray_caption(proto,un,pw,cred,exp,hari,sk,is_trial=is_trial,exp_ts=exp_ts,created_at=created_at),parse_mode="HTML")
     asyncio.create_task(sync_push_async())
 async def _del_acc(uid, un, user, chat):
     a = get_acc(un)
@@ -1276,69 +1375,6 @@ async def start(u,c):
     track_user(u.effective_user); c.user_data.clear()
     await u.message.reply_text(dash_text(u.effective_user,uid),reply_markup=kb_dash(uid),parse_mode="HTML")
 
-def hc_safe_filename(name):
-    n = re.sub(r"[^a-zA-Z0-9 _-]", "", name).strip()
-    n = re.sub(r"\s+", "_", n)
-    return (n[:80] or "axis")
-
-def hc_parse_ssh(value):
-    m = re.match(r"^([^:@\s]+):(\d+)@([^:\s]+):(.+)$", value.strip())
-    if not m: return None
-    host, port, user, pw = m.groups()
-    port = int(port)
-    if not (1 <= port <= 65535): return None
-    return host, port, user, pw
-
-def hc_generate_axis(name, ssh):
-    if not HC_API_KEY:
-        return None, "HTTP Custom API belum dikonfigurasi. Isi <code>hc_api_key</code> di <code>/root/vpnbot_config.json</code>."
-    host, port, user, pw = ssh
-    payload = {
-        "file_name": hc_safe_filename(name),
-        "powered_by": "SANSXML VPN STORE",
-        "main_connections": {
-            "ssh": {
-                "payload": {
-                    "enabled_methods": ["tls"],
-                    "tls": {
-                        "sni": "ssl-listen.noice.id",
-                        "version": "tls_1_3",
-                        "allow_insecure": False
-                    }
-                },
-                "account": {
-                    "server_host": host,
-                    "server_port": port,
-                    "username": user,
-                    "password": pw
-                },
-                "settings": {
-                    "keepalive_seconds": 10,
-                    "tcp_no_delay": True,
-                    "compression": False
-                }
-            }
-        },
-        "profiles": [],
-        "protection": {"content_access": "no_lock"},
-        "password": ""
-    }
-    try:
-        import requests
-        r = requests.post("https://api.eprodev.org/v1/configs/hc",
-            headers={"Authorization": f"Bearer {HC_API_KEY}", "Content-Type": "application/json"},
-            json=payload, timeout=45)
-        if r.status_code != 201:
-            try: err = r.json()
-            except: err = r.text[:500]
-            return None, f"HTTP Custom API error ({r.status_code}): <code>{str(err)[:700]}</code>"
-        data = r.json(); raw = base64.b64decode(data["content_base64"])
-        fn = data.get("file_name") or (hc_safe_filename(name) + ".hc")
-        if not fn.lower().endswith(".hc"): fn += ".hc"
-        return (fn, raw, data.get("sha256","")), None
-    except Exception as e:
-        return None, f"Gagal membuat config: <code>{str(e)[:500]}</code>"
-
 async def cb(u,c):
     uid = u.effective_user.id
     track_user(u.effective_user)
@@ -1350,31 +1386,6 @@ async def cb(u,c):
         try: await q.message.delete()
         except: pass
         try: await chat.send_message(dash_text(u.effective_user,uid),reply_markup=kb_dash(uid),parse_mode="HTML")
-        except: pass
-        return
-
-    if d == "buat_config":
-        c.user_data.clear()
-        try: await q.edit_message_text("<blockquote>📁 <b>MENU BUAT CONFIG</b>\n──────────────────────\nPilih untuk config aplikasi VPN:</blockquote>",reply_markup=kb_config_menu(),parse_mode="HTML")
-        except: pass
-        return
-    if d == "hc_menu":
-        try: await q.edit_message_text("<blockquote>🌐 <b>HTTP CUSTOM GENERATOR</b>\n━━━━━━━━━━━━━━━━━━━━\nPilih protokol yang ingin digunakan:</blockquote>",reply_markup=kb_hc_protocols(),parse_mode="HTML")
-        except: pass
-        return
-    if d.startswith("hc_proto|"):
-        proto = d.split("|",1)[1]
-        if proto != "ssh":
-            try: await q.edit_message_text("<blockquote>⚠️ <b>PROTOKOL BELUM TERSEDIA</b>\n\nSaat ini baru <b>SSH OVPN</b> yang aktif.</blockquote>",reply_markup=kb_hc_protocols(),parse_mode="HTML")
-            except: pass
-            return
-        try: await q.edit_message_text("<blockquote>🌐 <b>SSH OVPN</b>\n━━━━━━━━━━━━━━━━━━━━\nPilih config yang ingin digunakan:</blockquote>",reply_markup=kb_hc_ssh(),parse_mode="HTML")
-        except: pass
-        return
-    if d == "hc_axis":
-        c.user_data["hc_step"] = "name"
-        c.user_data["hc_template"] = "axis"
-        try: await q.edit_message_text(config_name_text(),reply_markup=InlineKeyboardMarkup([[B("🔙 Kembali","hc_proto|ssh",style="danger")]]),parse_mode="HTML")
         except: pass
         return
 
@@ -1738,7 +1749,8 @@ async def cb(u,c):
         return
 
     if d == "admin|menu":
-        if not is_owner(uid): return
+        if not is_owner(uid):
+            await q.answer("⚠️ Khusus owner bot",show_alert=True); return
         inc = get_income(); us = count_users_by_period()
         svr_stat = get_server_status()
         svr_parts = []
@@ -2004,47 +2016,6 @@ async def msg(u,c):
     track_user(u.effective_user)
     t = (u.message.text or "").strip()
 
-    hc_step = c.user_data.get("hc_step")
-    if hc_step:
-        if t.lower() == "/batal":
-            c.user_data.pop("hc_step", None); c.user_data.pop("hc_template", None); c.user_data.pop("hc_name", None)
-            await u.message.reply_text("❌ Pembuatan config dibatalkan.",reply_markup=kb_config_menu(),parse_mode="HTML")
-            return
-        if hc_step == "name":
-            name = hc_safe_filename(t)
-            if not name:
-                await u.message.reply_text(config_name_text(),parse_mode="HTML"); return
-            c.user_data["hc_name"] = name; c.user_data["hc_step"] = "ssh"
-            await u.message.reply_text(config_ssh_text(),parse_mode="HTML")
-            return
-        if hc_step == "ssh":
-            ssh = hc_parse_ssh(t)
-            if not ssh:
-                await u.message.reply_text("❌ Format akun tidak valid.\n\nGunakan: <code>host:port@user:pass</code>",parse_mode="HTML")
-                return
-            name = c.user_data.get("hc_name","axis")
-            c.user_data["hc_step"] = None
-            status = await u.message.reply_text("⚙️ <b>Membuat config HTTP Custom......</b>",parse_mode="HTML")
-            result, err = await asyncio.to_thread(hc_generate_axis,name,ssh)
-            try: await status.delete()
-            except: pass
-            if err:
-                await u.message.reply_text("❌ <b>Config gagal dibuat</b>\n\n"+err,parse_mode="HTML")
-                c.user_data.clear(); return
-            fn, raw, sha = result
-            caption = ("<blockquote>✅ <b>Config berhasil dibuat</b>\n"
-                       "──────────────────\n"
-                       f"📁 Nama: <b>{name}</b>\n"
-                       "🌐 Protocol: <b>SSH OVPN</b>\n"
-                       "🧩 Import file config ke aplikasi <b>HTTP Custom</b>\n\n"
-                       "🛍️ <b>SANSXML VPN STORE</b>\n"
-                       "✨ Terimakasih telah menggunakan layanan kami ✨</blockquote>")
-            try:
-                await u.message.reply_document(document=InputFile(io.BytesIO(raw),filename=fn),caption=caption,parse_mode="HTML")
-            except Exception as e:
-                await u.message.reply_text(f"❌ Gagal mengirim file config: <code>{str(e)[:300]}</code>",parse_mode="HTML")
-            c.user_data.clear(); return
-
     bf = c.user_data.get("backup_field")
     if bf and is_owner(uid):
         c.user_data["backup_field"] = None
@@ -2238,8 +2209,8 @@ async def msg(u,c):
                     f"💵 Harga Akun : <b>{rupiah(price)}</b>\n"
                     f"📉 Kurang     : <b>{rupiah(kurang)}</b>\n\n"
                     "Silakan topup saldo melalui menu\n"
-                    "Tombol 💰 TOPUP SALDO.</blockquote>")
-                kb = InlineKeyboardMarkup([[B("💰 TOPUP SALDO","isi_saldo",style="success")],[B("🔙 Kembali","menu|main",style="danger")]])
+                    "Tombol 🏦 SALDO.</blockquote>")
+                kb = InlineKeyboardMarkup([[B("🏦 SALDO","isi_saldo",style="success")],[B("🔙 Kembali","menu|main",style="danger")]])
                 await u.message.reply_text(msg_saldo,reply_markup=kb,parse_mode="HTML"); return
             c.user_data["created_in_session"] = True
             if proto == "ssh":
@@ -2349,18 +2320,24 @@ WantedBy=multi-user.target
 SVCEOF
 systemctl daemon-reload
 systemctl enable vpnbot >/dev/null 2>&1
-systemctl restart vpnbot
-sleep 3
+# Bot baru dijalankan setelah token diisi lewat menu [05].
+if [ -n "$BOT_TOKEN" ]; then
+    systemctl restart vpnbot
+    sleep 3
+else
+    systemctl stop vpnbot >/dev/null 2>&1 || true
+fi
 
 # 9. MENU VPS
 echo ""
-echo -e "  ${YELLOW}▸ Install Menu VPS${NC}"
+echo -e "\n  ${BLUE}CONTROL PANEL${NC} ${CYAN}◆${NC}"
+echo -e "  ${CYAN}▸${NC} ${WHITE}Install VPS Dashboard${NC}"
 
 cat > /usr/local/bin/sansxml-menu << 'MENUEOF'
 #!/bin/bash
-PU='\033[38;5;135m'; PU2='\033[38;5;177m'; CY='\033[38;5;51m'
-PK='\033[38;5;213m'; WH='\033[1;37m'; GR='\033[38;5;46m'
-RE='\033[38;5;196m'; YE='\033[38;5;226m'; GY='\033[38;5;245m'; N='\033[0m'
+PU='\033[1;34m'; PU2='\033[1;36m'; CY='\033[1;36m'
+PK='\033[1;34m'; WH='\033[1;37m'; GR='\033[1;34m'
+RE='\033[1;31m'; YE='\033[1;33m'; GY='\033[1;36m'; N='\033[0m'
 W=62
 get_ip(){ hostname -I 2>/dev/null | awk '{print $1}'; }
 get_uptime(){ local s=$(cat /proc/uptime|awk '{print int($1)}'); echo "$((s/86400))d $(((s%86400)/3600))h $(((s%3600)/60))m"; }
@@ -2417,54 +2394,124 @@ box_row(){ printf " %b\n" "$1"; }
 kv(){ local key=$(printf '%-9s' "$1"); printf " ${GY}%s${N} ${PK}›${N} ${WH}%s${N}\n" "$key" "$2"; }
 kvc(){ local key=$(printf '%-9s' "$1"); printf " ${GY}%s${N} ${PK}›${N} ${3}%s${N}\n" "$key" "$2"; }
 bar(){ local p=$1; local f=$((p/10)); local o=""; for ((i=1;i<=10;i++)); do [ $i -le $f ] && o="${o}█" || o="${o}░"; done; echo "$o"; }
-show_banner(){ local tgl=$(date '+%d %b %Y  %H:%M:%S'); echo ""
-    local l=""; for ((i=0;i<62;i++)); do l="${l}─"; done
-    printf "${PU}╭${l}╮${N}\n"
-    printf "          ${PK}SC ${WH}SANSXML VPN BOT STORE${N}\n"
-    printf "${PU}╰${l}╯${N}\n"
-    echo -e "           ${PU2}sansxml${N}  ${CY}◆${N}  ${PU2}VPS${N}  ${CY}◆${N}  ${WH}${tgl}${N}"; echo ""; }
+show_banner(){
+    local os kernel cpu load ram disk up now ip bot ws ssl udp xry ngx drp hap
+    local sshc vmc vlc trc total onl
+    os=$(grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"')
+    kernel=$(uname -r 2>/dev/null)
+    cpu=$(nproc 2>/dev/null || echo 0)
+    load=$(awk '{print $1" "$2" "$3}' /proc/loadavg 2>/dev/null)
+    ram=$(get_ram_pct); disk=$(get_disk_pct); up=$(get_uptime)
+    now=$(date '+%d %b %Y  %H:%M:%S')
+    ip=$(get_ip)
+    bot=$(systemctl is-active vpnbot 2>/dev/null); ws=$(systemctl is-active ws-ssh 2>/dev/null)
+    ssl=$(systemctl is-active stunnel4 2>/dev/null); udp=$(systemctl is-active udpgw 2>/dev/null)
+    xry=$(systemctl is-active xray 2>/dev/null); ngx=$(systemctl is-active nginx 2>/dev/null)
+    drp=$(systemctl is-active dropbear 2>/dev/null); hap=$(systemctl is-active haproxy 2>/dev/null)
+    sshc=$(get_ssh_count); vmc=$(get_xray_count vmess); vlc=$(get_xray_count vless); trc=$(get_xray_count trojan)
+    total=$((sshc+vmc+vlc+trc)); onl=$(get_online)
+
+    echo ""
+    printf "        ${PU2}✦${N} ${WH}sansxml${N}  ${CY}◆${N}  ${PU2}VPS${N}  ${CY}◆${N}\n"
+    printf "        ${CY}%s${N}\n\n" "$now"
+
+    printf "${PU}╭─ ${PK}SERVER${PU} ─────────────────────────────────────────────────────╮${N}\n"
+    printf " ${GY}OS${N}       ${WH}%s${N}   ${GY}CPU${N} ${WH}%s vCPU${N}\n" "$os" "$cpu"
+    printf " ${GY}KERNEL${N}   ${WH}%s${N}   ${GY}LOAD${N} ${WH}%s${N}\n" "$kernel" "$load"
+    printf " ${GY}RAM${N}      ${WH}%s  %s${N}   ${GY}DISK${N} ${WH}%s  %s${N}\n" "$(bar "$ram")" "${ram}%" "$(bar "$disk")" "${disk}%"
+    printf " ${GY}UPTIME${N}   ${WH}%s${N}   ${GY}STATUS${N} ${GR}●${N} ${WH}ONLINE${N}\n" "$up"
+    printf " ${GY}IP${N}       ${WH}%s${N}\n" "$ip"
+    printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
+
+    printf "${PU}╭─ ${PK}TRAFFIC${PU} ────────────────────────────────────────────────────╮${N}\n"
+    printf " ${GY}TODAY${N}    ${WH}%s${N}\n" "$(get_traffic_pair d)"
+    printf " ${GY}MONTH${N}    ${WH}%s${N}\n" "$(get_traffic_pair m)"
+    printf " ${GY}SPEED${N}    ${WH}%s${N}   ${GY}%s${N}\n" "$(get_speed)" "$(date '+%B' | tr '[:upper:]' '[:lower:]')"
+    printf " ${GY}LIMIT${N}    ${WH}0 / 3000 GB${N}\n"
+    printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
+
+    printf "${PU}╭─ ${PK}SERVICES${PU} ───────────────────────────────────────────────────╮${N}\n"
+    printf " ${WH}%b BOT${N}       ${WH}%b SSH-WS${N}    ${WH}%b SSL${N}      ${WH}%b UDP${N}\n" \
+      "$(status_dot "$bot")" "$(status_dot "$ws")" "$(status_dot "$ssl")" "$(status_dot "$udp")"
+    printf " ${WH}%b XRAY${N}     ${WH}%b NGIX${N}      ${WH}%b DROPBEAR${N}  ${WH}%b HAPROXY${N}\n" \
+      "$(status_dot "$xry")" "$(status_dot "$ngx")" "$(status_dot "$drp")" "$(status_dot "$hap")"
+    printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
+
+    printf "${PU}╭─ ${PK}ACCOUNTS${PU} ───────────────────────────────────────────────────╮${N}\n"
+    printf " ${GY}SSH/OVPN${N} ${WH}%s${N}   ${GY}VMESS${N} ${WH}%s${N}   ${GY}VLESS${N} ${WH}%s${N}   ${GY}TROJAN${N} ${WH}%s${N}   ${GY}TOTAL${N} ${WH}%s${N}\n" "$sshc" "$vmc" "$vlc" "$trc" "$total"
+    printf " ${GY}LIVE${N}     ${GR}●${N} ${WH}OK${N}   ${GY}ONLINE${N} ${WH}%s${N}   ${GY}RAM${N} ${WH}%s%%${N}   ${GY}CPU${N} ${WH}%s%%${N}\n" "$onl" "$ram" "$(get_cpu_pct)"
+    printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n"
+}
+
+status_dot(){ [ "$1" = "active" ] && printf "${GR}●${N}" || printf "${RE}●${N}"; }
+get_xray_count(){
+    local proto="$1" f="/root/vpnbot_accounts.json"
+    [ ! -f "$f" ] && { echo 0; return; }
+    python3 - "$proto" "$f" <<'PYCODE'
+import json,sys
+proto,path=sys.argv[1],sys.argv[2]
+try:
+    d=json.load(open(path))
+    print(sum(1 for a in d.values() if a.get("proto")==proto))
+except Exception:
+    print(0)
+PYCODE
+}
+get_ssh_count(){
+    local f="/root/vpnbot_accounts.json"
+    [ ! -f "$f" ] && { echo 0; return; }
+    python3 - "$f" <<'PYCODE'
+import json,sys
+try:
+    d=json.load(open(sys.argv[1])); print(sum(1 for a in d.values() if a.get("proto","ssh")=="ssh"))
+except Exception:
+    print(0)
+PYCODE
+}
+get_traffic_pair(){
+    local mode="$1"
+    command -v vnstat >/dev/null 2>&1 || { echo "0 MiB  0 MiB  0 MiB"; return; }
+    vnstat --json "$mode" 1 2>/dev/null | python3 -c '
+import sys,json
+mode=sys.argv[1]
+try:
+    d=json.load(sys.stdin); ifs=d.get("interfaces",[])
+    arr=ifs[0].get("traffic",{}).get("day" if mode=="d" else "month",[]) if ifs else []
+    x=arr[-1] if arr else {}
+    rx=float(x.get("rx",0)); tx=float(x.get("tx",0)); total=rx+tx
+    def fmt(v):
+        if v >= 1024**3: return f"{v/1024**3:.1f} GiB"
+        return f"{v/1024**2:.0f} MiB"
+    print(f"{fmt(rx)}  {fmt(tx)}  {fmt(total)}")
+except Exception:
+    print("0 MiB  0 MiB  0 MiB")
+' "$mode"
+}
+get_speed(){
+    local a rx1 tx1 rx2 tx2
+    a=$(awk 'NR>2{gsub(":","",$1);rx+=$2;tx+=$10}END{print rx,tx}' /proc/net/dev)
+    sleep 1
+    local b=$(awk 'NR>2{gsub(":","",$1);rx+=$2;tx+=$10}END{print rx,tx}' /proc/net/dev)
+    rx1=$(awk '{print $1}' <<<"$a"); tx1=$(awk '{print $2}' <<<"$a")
+    rx2=$(awk '{print $1}' <<<"$b"); tx2=$(awk '{print $2}' <<<"$b")
+    awk -v r=$((rx2-rx1)) -v t=$((tx2-tx1)) 'BEGIN{printf "%.2f Mbit/s",((r+t)*8)/1000000}'
+}
+get_cpu_pct(){
+    local a b
+    a=$(awk '/^cpu /{print $2+$3+$4+$5+$6+$7+$8, $5}' /proc/stat)
+    sleep 0.2
+    b=$(awk '/^cpu /{print $2+$3+$4+$5+$6+$7+$8, $5}' /proc/stat)
+    awk -v a="$a" -v b="$b" 'BEGIN { split(a,x); split(b,y); dt=y[1]-x[1]; di=y[2]-x[2]; if (dt > 0) printf "%d", ((dt-di)/dt)*100; else printf "0" }'
+}
 show_menu(){ clear
-    local ip=$(get_ip); local up=$(get_uptime)
-    local os=$(grep PRETTY_NAME /etc/os-release|cut -d= -f2|tr -d '"')
-    local krn=$(uname -r|cut -d- -f1); local core=$(nproc)
-    local load=$(cat /proc/loadavg|awk '{print $1, $2, $3}')
-    local rp=$(get_ram_pct); local rh=$(get_ram_h); local dp=$(get_disk_pct); local dh=$(get_disk_h)
-    local tgl=$(date '+%d %b %Y  %H:%M:%S')
-    local bus=$(get_bot_users); local acc=$(get_accounts); local blk=$(get_blocked); local onl=$(get_online)
-    local today=$(get_traffic_today); local month=$(get_traffic_month)
-    local bot=$(systemctl is-active vpnbot 2>/dev/null); local ws=$(systemctl is-active ws-ssh 2>/dev/null)
-    local ssl=$(systemctl is-active stunnel4 2>/dev/null); local udp=$(systemctl is-active udpgw 2>/dev/null)
-    local xry=$(systemctl is-active xray 2>/dev/null)
-    local d_bot=$([ "$bot" = "active" ] && echo "${GR}●${N}" || echo "${RE}●${N}")
-    local d_ws=$([ "$ws" = "active" ] && echo "${GR}●${N}" || echo "${RE}●${N}")
-    local d_ssl=$([ "$ssl" = "active" ] && echo "${GR}●${N}" || echo "${RE}●${N}")
-    local d_udp=$([ "$udp" = "active" ] && echo "${GR}●${N}" || echo "${RE}●${N}")
-    local d_xry=$([ "$xry" = "active" ] && echo "${GR}●${N}" || echo "${RE}●${N}")
-    local hl="${GR}GOOD${N}"; [ "$bot" != "active" ] && hl="${RE}BAD${N}"
     show_banner
-    box_top "SERVER"
-    kv "OS" "$os"; kv "KERNEL" "$krn"
-    printf " ${GY}%-9s${N} ${PK}›${N} ${WH}%s vCPU${N}      ${GY}load${N} ${YE}%s${N}\n" "CPU" "$core" "$load"
-    printf " ${GY}%-9s${N} ${PK}›${N} ${PU2}%s${N} ${WH}%3s%%${N}  ${GY}%s${N}\n" "RAM" "$(bar $rp)" "$rp" "$rh"
-    printf " ${GY}%-9s${N} ${PK}›${N} ${PU2}%s${N} ${WH}%3s%%${N}  ${GY}%s${N}\n" "DISK" "$(bar $dp)" "$dp" "$dh"
-    kv "UPTIME" "$up"; kv "TIME" "$tgl"
-    box_mid "NETWORK"
-    kvc "IP" "$ip" "${GR}"; kvc "STATUS" "● ONLINE" "${GR}"; kv "BANDWIDTH" "0 / 3000 GB"
-    box_mid "TRAFFIC"
-    kv "TODAY" "$today"; kv "MONTH" "$month"; kv "SPEED" "0 Mbps"
-    box_bot; echo ""
-    box_top "SERVICES"
-    printf " %b ${WH}BOT${N}   %b ${WH}WS-SSH${N}   %b ${WH}SSL${N}   %b ${WH}UDP${N}   %b ${WH}XRAY${N}\n" "$d_bot" "$d_ws" "$d_ssl" "$d_udp" "$d_xry"
-    kv "HEALTH" "$hl"; kv "CAPACITY" "50 USER"; kvc "LIVE" "OK" "${GR}"
-    box_mid "ACCOUNTS"
-    box_row "${GY}SSH${N} ${WH}${acc}${N}   ${GY}ONLINE${N} ${GR}${onl}${N}   ${GY}BLOCK${N} ${WH}${blk}${N}   ${GY}BOT${N} ${WH}${bus}${N}"
-    box_bot; echo ""
-    box_top "MAIN MENU"
-    printf " ${YE}[01]${N} ${WH}%-25s${N} ${YE}[03]${N} ${WH}%s${N}\n" "STOP BOT & CLEAN CACHE" "BANDWIDTH MONITOR"
-    printf " ${YE}[02]${N} ${WH}%-25s${N} ${YE}[04]${N} ${WH}%s${N}\n" "VPS INFORMATION" "SERVICE STATUS"
-    printf " ${YE}[05]${N} ${WH}%-25s${N} ${YE}[06]${N} ${WH}%s${N}\n" "UBAH TOKEN BOT" "EXIT"
-    box_bot; echo ""
-    echo -ne "${PK}◆${N} ${PU2}Select${N} ${CY}[1-6]${N} ${PK}›${N} "; }
+    printf "\n${PU}╭─ ${PK}MENU${PU} ───────────────────────────────────────────────────────╮${N}\n"
+    printf " ${CY}[1]${N}  ${WH}AUTO STOP BOT${N}          ${CY}[4]${N}  ${WH}SERVICE STATUS${N}\n"
+    printf " ${CY}[2]${N}  ${WH}VPS INFORMATION${N}        ${CY}[5]${N}  ${WH}ADD TOKEN BOT${N}\n"
+    printf " ${CY}[3]${N}  ${WH}BANDWIDTH${N}              ${CY}[6]${N}  ${WH}EXIT${N}\n"
+    printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
+    echo -ne "${PU2}✦${N} ${CY}Select${N} ${WH}[1-6]${N} ${PU2}›${N} "
+}
 show_vps_info(){ clear; show_banner; box_top "VPS INFORMATION"
     kv "OS" "$(grep PRETTY_NAME /etc/os-release|cut -d= -f2|tr -d '"')"
     kv "Kernel" "$(uname -r)"; kv "Arch" "$(uname -m)"; kv "Hostname" "$(hostname)"
@@ -2487,12 +2534,12 @@ show_bandwidth(){ clear; show_banner; box_top "BANDWIDTH MONITOR"
     kvc "Status" "Monitoring Aktif" "${GR}"
     box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read; }
 show_services(){ clear; show_banner; box_top "SERVICE STATUS"
-    local svcs=("vpnbot:Telegram Bot" "ws-ssh:WS-SSH 80" "ws-ssh-alt:WS-SSH 8080" "stunnel4:SSL Tunnel" "udpgw:UDP Gateway" "xray:Xray VMess/VLESS/Trojan" "ssh:SSH Service")
+    local svcs=("vpnbot:Telegram Bot" "ws-ssh:WS-SSH 80" "ws-ssh-alt:WS-SSH 8080" "stunnel4:SSL Tunnel" "udpgw:UDP Gateway" "xray:Xray VMess/VLESS/Trojan" "nginx:Nginx" "dropbear:Dropbear 109" "haproxy:HAProxy" "ssh:SSH Service")
     for e in "${svcs[@]}"; do
         local s="${e%%:*}"; local l="${e##*:}"
         local st=$(systemctl is-active "$s" 2>/dev/null || echo off)
-        if [ "$st" = "active" ]; then printf " ${GR}●${N} ${WH}%-24s${N} ${GR}%s${N}\n" "$l" "$st"
-        else printf " ${RE}●${N} ${WH}%-24s${N} ${RE}%s${N}\n" "$l" "$st"; fi
+        if [ "$st" = "active" ]; then printf " ${GR}●${N} ${WH}%-24s${N} ${WH}%s${N}\n" "$l" "$st"
+        else printf " ${RE}●${N} ${WH}%-24s${N} ${WH}%s${N}\n" "$l" "$st"; fi
     done
     box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read; }
 change_token(){ clear; show_banner; box_top "UBAH TOKEN BOT"
@@ -2518,40 +2565,36 @@ json.dump(d,open(f,'w'),indent=2,ensure_ascii=False)
     if [ "$st" = "active" ]; then kvc "Result" "✓ TOKEN DIPERBARUI" "${GR}"
     else kvc "Result" "✗ GAGAL" "${RE}"; fi
     box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read; }
-stop_bot_clean(){ clear; show_banner; box_top "STOP BOT & CLEAN CACHE"
-    box_row "${YE}Bot akan dimatikan & cache dibersihkan${N}"
-    box_mid "AKAN DILAKUKAN"
-    box_row "Stop service vpnbot"
-    box_row "Clean apt cache & journal"
-    box_row "Clean /tmp, /var/tmp, log lama"
-    box_row "Drop page cache RAM"
-    box_bot; echo ""
-    echo -ne "${PK}◆${N} Ketik ${GR}${WH}YES${N} untuk konfirmasi: "
+stop_bot_clean(){ clear
+    printf "${PU}╭─ ${PK}REMOVE SANSXML SC${PU} ────────────────────────────────────────╮${N}\n"
+    printf " ${WH}Fungsi ini akan mencopot SC dari VPS.${N}\n"
+    printf " ${GY}• Stop & hapus service Telegram Bot${N}\n"
+    printf " ${GY}• Hapus menu SANSXML dan auto-menu SSH${N}\n"
+    printf " ${GY}• Hapus file konfigurasi dan source bot${N}\n"
+    printf " ${GY}• VPN core seperti XRAY/SSH/SSL tetap dipertahankan${N}\n"
+    printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
+    echo -ne "${PK}◆${N} Ketik ${GR}YES${N} untuk mencopot SC: "
     read c
-    [ "$c" != "YES" ] && { echo -e "  ${GR}Dibatalkan${N}"; sleep 1; return; }
+    [ "$c" != "YES" ] && { echo -e "  ${GY}Dibatalkan${N}"; sleep 1; return; }
+
     echo ""
-    echo -e "  ${PU2}[1/5]${N} Stop bot..."; systemctl stop vpnbot 2>/dev/null; sleep 1
-    echo -e "        ${GR}✓ Bot dihentikan${N}"
-    echo -e "  ${PU2}[2/5]${N} Clean apt cache..."; apt-get clean >/dev/null 2>&1
-    rm -rf /var/cache/apt/archives/*.deb /var/lib/apt/lists/* 2>/dev/null
-    echo -e "        ${GR}✓ Apt cache${N}"
-    echo -e "  ${PU2}[3/5]${N} Clean journal..."; journalctl --rotate >/dev/null 2>&1; journalctl --vacuum-time=1s >/dev/null 2>&1
-    echo -e "        ${GR}✓ Journal${N}"
-    echo -e "  ${PU2}[4/5]${N} Clean temp & log..."; rm -rf /tmp/* /var/tmp/* /root/.cache/* 2>/dev/null
-    find /var/log -type f \( -name "*.gz" -o -name "*.old" -o -name "*.log.*" \) -delete 2>/dev/null
-    truncate -s 0 /var/log/syslog /var/log/auth.log 2>/dev/null
-    echo -e "        ${GR}✓ Temp & log${N}"
-    echo -e "  ${PU2}[5/5]${N} Drop RAM cache..."; sync; echo 3 > /proc/sys/vm/drop_caches 2>/dev/null
-    echo -e "        ${GR}✓ RAM cache${N}"
-    echo ""
-    box_top "STATUS AKHIR"
-    kvc "Bot Telegram" "STOPPED" "${RE}"
-    kvc "Disk" "$(df -h / | tail -1 | awk '{print $3}') ($(df -h / | tail -1 | awk '{print $5}'))" "${GR}"
-    kvc "RAM" "$(free -h | awk '/^Mem:/{print $3"/"$2}')" "${GR}"
-    kvc "Result" "VPS BERSIH" "${GR}"
-    box_bot; echo ""
-    echo -e "  ${YE}Start bot:${N} ${PK}systemctl start vpnbot${N}"; echo ""
-    echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read; }
+    systemctl stop vpnbot 2>/dev/null || true
+    systemctl disable vpnbot 2>/dev/null || true
+    rm -f /etc/systemd/system/vpnbot.service
+    systemctl daemon-reload 2>/dev/null || true
+
+    rm -f /root/bot.py /root/vpnbot.py /root/vpnbot_config.json /root/vpnbot_accounts.json
+    rm -f /usr/local/bin/sansxml-menu
+    rm -f /etc/profile.d/sansxml-menu.sh
+    rm -f /etc/systemd/system/vpnbot.service
+    rm -rf /root/sansxml-bot /root/SANSXML-VPN-BOT
+
+    clear
+    printf "\n  ${GR}✓ SC SANSXML berhasil dicopot dari VPS.${N}\n"
+    printf "  ${GY}VPN core tetap berjalan seperti biasa.${N}\n\n"
+    exit 0
+}
+
 while true; do
     show_menu
     read choice
@@ -2578,22 +2621,5 @@ fi
 PROFEOF
 chmod +x /etc/profile.d/sansxml-menu.sh
 
-# 10. DONE
-clear
-echo ""
-echo -e "  ${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "  ${GREEN}        ✓✓✓ INSTALASI SELESAI ✓✓✓${NC}"
-echo -e "  ${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
-for s in ssh ws-ssh ws-ssh-alt stunnel4 udpgw vpnbot xray; do
-    ST=$(systemctl is-active "$s" 2>/dev/null || echo "n/a")
-    printf "  %-14s : " "$s"
-    [ "$ST" = "active" ] && echo -e "${GREEN}$ST${NC}" || echo -e "${RED}$ST${NC}"
-done
-echo ""
-echo -e "  ${CYAN}Domain${NC} : ${GREEN}$DOMAIN${NC}"
-echo -e "  ${CYAN}Bot${NC}    : Cek di Telegram (/start)"
-echo -e "  ${CYAN}Log${NC}    : tail -f /root/vpnbot.log"
-echo ""
-sleep 2
-[ -x /usr/local/bin/sansxml-menu ] && exec /usr/local/bin/sansxml-menu
+# 10. OPEN MENU
+exec /usr/local/bin/sansxml-menu
