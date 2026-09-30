@@ -10,7 +10,7 @@ spin(){ local pid=$1 msg="$2"; local f=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦
 clear
 echo ""
 echo -e "  ${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "  ${CYAN}    SANSXML VPN STORE — AUTO INSTALL v8${NC}"
+echo -e "  ${CYAN}    SANSXML VPN STORE — AUTO INSTALL v9${NC}"
 echo -e "  ${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -302,7 +302,7 @@ cat > /root/vpnbot_config.json << CFGEOF
 }
 CFGEOF
 
-# 7. BOT.PY — Full
+# 7. BOT.PY
 echo ""
 echo -e "  ${YELLOW}▸ Install Bot.py${NC}"
 
@@ -477,7 +477,7 @@ def get_vps_detail(key=None):
     d["bw"] = get_bandwidth_gb(key)
     return d
 
-# Xray
+# XRAY
 def xray_exists(): return os.path.exists("/usr/local/bin/xray") or shutil.which("xray")
 def xray_load_cfg():
     if not os.path.exists(XRAY_CONFIG): return None
@@ -1059,7 +1059,7 @@ def xray_caption(proto, un, pw, cred, exp, days, sk, is_trial=False):
           f"<b>{t1}</b>",url1,"",
           f"<b>{t2}</b>",url2,"",
           f"<b>{t3}</b>",url3,"",
-          "━━━━━━━━━━━━━━━━━━━━━━━","",f"Durasi     : {days} Hari",
+          "━━━━━━━━━━━━━━━━━━━━━━━","",f"Durasi     : {TRIAL_DURATION_MIN} Minute" if is_trial else f"Durasi     : {days} Hari",
           f"Dibuat     : {cf}",f"Berakhir   : {ef}","",
           "━━━━━━━━━━━━━━━━━━━━━━━","<b>      ◤ SANSXML VPN STORE ◢</b>",
           "<i>❖ Terima kasih ❖</i>","</blockquote>"]
@@ -1071,23 +1071,11 @@ async def do_create(chat, uid, user, un, pw, hari, is_trial=False, sk="sg_1ip"):
     price = 0 if is_trial else get_price(hari,sk)
     if not is_trial and get_bal(uid) < price:
         kurang = price - get_bal(uid)
-        msg_saldo = (
-            "<pre>"
-            "┌─────────────────────────────────────┐\n"
-            "│ ❌ Saldo Tidak Cukup                │\n"
-            "│                                     │\n"
-            f"│ 💰 Saldo Anda : {rupiah(get_bal(uid)):<20}│\n"
-            f"│ 💵 Harga Akun : {rupiah(price):<20}│\n"
-            f"│ 📉 Kurang     : {rupiah(kurang):<20}│\n"
-            "└─────────────────────────────────────┘"
-            "</pre>\n\n"
-            "Silakan topup saldo melalui menu\n"
-            "Tombol 💰 TOPUP SALDO."
-        )
-        kb = InlineKeyboardMarkup([[B("💰 TOPUP SALDO","isi_saldo",style="success")],
-            [B("🔙 Kembali","menu|main",style="danger")]])
-        await chat.send_message(msg_saldo, reply_markup=kb, parse_mode="HTML")
-        return
+        msg_saldo = ("<pre>┌─────────────────────────────────────┐\n│ ❌ Saldo Tidak Cukup                │\n│                                     │\n"
+            f"│ 💰 Saldo Anda : {rupiah(get_bal(uid)):<20}│\n│ 💵 Harga Akun : {rupiah(price):<20}│\n│ 📉 Kurang     : {rupiah(kurang):<20}│\n"
+            "└─────────────────────────────────────┘</pre>\n\nSilakan topup saldo melalui menu\nTombol 💰 TOPUP SALDO.")
+        kb = InlineKeyboardMarkup([[B("💰 TOPUP SALDO","isi_saldo",style="success")],[B("🔙 Kembali","menu|main",style="danger")]])
+        await chat.send_message(msg_saldo,reply_markup=kb,parse_mode="HTML"); return
     m = await chat.send_message(f"⚙️ Membuat <b>{'TRIAL' if is_trial else 'PREMIUM'} AKUN</b>...",parse_mode="HTML")
     r = await asyncio.to_thread(ssh_create,un,pw,hari,is_trial,sk)
     if not is_trial:
@@ -1129,33 +1117,42 @@ async def do_extend(chat, uid, user, un, hari, sk):
     add_trx(uid,user.first_name or "User",user.username or "","perpanjang",price,f"{hari}h {un}")
     await m.edit_text(acc_caption(un,a["password"],ne,f"{a.get('days',30)} Hari",a.get("limit_ip",1),a.get("manual",False),a.get("is_trial",False),sk),parse_mode="HTML")
     asyncio.create_task(sync_push_async())
-async def do_create_xray(chat, uid, user, un, pw, hari, sk, proto):
-    s = SERVERS.get(sk,{}); price = get_price(hari,sk)
-    if get_bal(uid) < price:
+async def do_create_xray(chat, uid, user, un, pw, hari, sk, proto, is_trial=False):
+    s = SERVERS.get(sk,{}); price = 0 if is_trial else get_price(hari,sk)
+    if not is_trial and get_bal(uid) < price:
         kurang = price - get_bal(uid)
         msg_saldo = ("<pre>┌─────────────────────────────────────┐\n│ ❌ Saldo Tidak Cukup                │\n│                                     │\n"
             f"│ 💰 Saldo Anda : {rupiah(get_bal(uid)):<20}│\n│ 💵 Harga Akun : {rupiah(price):<20}│\n│ 📉 Kurang     : {rupiah(kurang):<20}│\n"
             "└─────────────────────────────────────┘</pre>\n\nSilakan topup saldo melalui menu\nTombol 💰 TOPUP SALDO.")
         kb = InlineKeyboardMarkup([[B("💰 TOPUP SALDO","isi_saldo",style="success")],[B("🔙 Kembali","menu|main",style="danger")]])
         await chat.send_message(msg_saldo,reply_markup=kb,parse_mode="HTML"); return
-    m = await chat.send_message(f"⚙️ Membuat <b>{proto.upper()}</b> akun...",parse_mode="HTML")
+    hdr = 'TRIAL' if is_trial else 'PREMIUM'
+    m = await chat.send_message(f"⚙️ Membuat <b>{hdr} {proto.upper()}</b> akun...",parse_mode="HTML")
     cred = str(uuid.uuid4()) if proto in ("vmess","vless") else pw
     ok, err = await asyncio.to_thread(xray_add_user,proto,cred)
     if not ok:
         await m.edit_text(f"❌ <b>Gagal</b>\n<code>{err}</code>",parse_mode="HTML"); return
-    ok2,_ = reduce_bal(uid,price)
-    if not ok2: await m.edit_text("❌ Saldo berubah.",parse_mode="HTML"); return
-    exp = (datetime.now()+timedelta(days=hari)).strftime("%Y-%m-%d")
+    if not is_trial:
+        ok2,_ = reduce_bal(uid,price)
+        if not ok2: await m.edit_text("❌ Saldo berubah.",parse_mode="HTML"); return
+    if is_trial:
+        exp = datetime.now().strftime("%Y-%m-%d")
+        exp_ts = (datetime.now() + timedelta(minutes=TRIAL_DURATION_MIN)).strftime("%Y-%m-%d %H:%M:%S")
+    else:
+        exp = (datetime.now()+timedelta(days=hari)).strftime("%Y-%m-%d")
+        exp_ts = exp+" 23:59:59"
     key = f"{proto}_{un}"
     accs = load_json(ACCOUNTS_FILE,{})
     accs[key] = {"user_id":uid,"username":un,"password":pw,
         "uuid":cred if proto != "trojan" else "","proto":proto,"exp":exp,
-        "exp_ts":exp+" 23:59:59","days":hari,"limit_ip":1,"harga":price,
+        "exp_ts":exp_ts,"days":hari,"limit_ip":1,"harga":price,
         "server_key":sk,"created_at":datetime.now().isoformat(),
-        "first_name":user.first_name or "","username_tg":user.username or ""}
+        "first_name":user.first_name or "","username_tg":user.username or "",
+        "is_trial":is_trial}
     save_json(ACCOUNTS_FILE,accs)
-    add_trx(uid,user.first_name or "User",user.username or "",f"{proto}_akun",price,f"{hari}h {s.get('name','')}")
-    await m.edit_text(xray_caption(proto,un,pw,cred,exp,hari,sk),parse_mode="HTML")
+    if not is_trial:
+        add_trx(uid,user.first_name or "User",user.username or "",f"{proto}_akun",price,f"{hari}h {s.get('name','')}")
+    await m.edit_text(xray_caption(proto,un,pw,cred,exp,hari,sk,is_trial=is_trial),parse_mode="HTML")
     asyncio.create_task(sync_push_async())
 async def _del_acc(uid, un, user, chat):
     a = get_acc(un)
@@ -1731,6 +1728,17 @@ async def cb(u,c):
         if sk not in SERVERS: await chat.send_message("❌ Server tidak valid.",parse_mode="HTML"); return
         used,mx = get_slot_info(sk)
         if used >= mx: await chat.send_message(f"<blockquote>❌ <b>Slot Penuh</b></blockquote>",parse_mode="HTML"); return
+        mode = c.user_data.get("mode","buat")
+        try: await q.edit_message_reply_markup(reply_markup=kb_srv_lock())
+        except: pass
+        if mode == "trial":
+            if trial_left(uid) <= 0:
+                await chat.send_message("🚫 <b>Batas trial tercapai</b>",parse_mode="HTML"); return
+            use_trial(uid)
+            uq = ''.join(random.choices(string.ascii_lowercase+string.digits,k=4))
+            c.user_data.clear(); c.user_data["created_in_session"] = True
+            await do_create_xray(chat,uid,u.effective_user,f"trial-{uq}",f"trial{uq}",1,sk,proto,is_trial=True)
+            return
         c.user_data["proto"] = proto
         c.user_data["buat_step"] = "username"
         c.user_data["buat_data"] = {"server_key":sk,"proto":proto}
@@ -2006,23 +2014,11 @@ async def msg(u,c):
                 await u.message.reply_text("⚠️ <b>Backup belum siap</b>",parse_mode="HTML"); return
             if get_bal(uid) < price:
                 kurang = price - get_bal(uid)
-                msg_saldo = (
-                    "<pre>"
-                    "┌─────────────────────────────────────┐\n"
-                    "│ ❌ Saldo Tidak Cukup                │\n"
-                    "│                                     │\n"
-                    f"│ 💰 Saldo Anda : {rupiah(get_bal(uid)):<20}│\n"
-                    f"│ 💵 Harga Akun : {rupiah(price):<20}│\n"
-                    f"│ 📉 Kurang     : {rupiah(kurang):<20}│\n"
-                    "└─────────────────────────────────────┘"
-                    "</pre>\n\n"
-                    "Silakan topup saldo melalui menu\n"
-                    "Tombol 💰 TOPUP SALDO."
-                )
-                kb = InlineKeyboardMarkup([[B("💰 TOPUP SALDO","isi_saldo",style="success")],
-                    [B("🔙 Kembali","menu|main",style="danger")]])
-                await u.message.reply_text(msg_saldo, reply_markup=kb, parse_mode="HTML")
-                return
+                msg_saldo = ("<pre>┌─────────────────────────────────────┐\n│ ❌ Saldo Tidak Cukup                │\n│                                     │\n"
+                    f"│ 💰 Saldo Anda : {rupiah(get_bal(uid)):<20}│\n│ 💵 Harga Akun : {rupiah(price):<20}│\n│ 📉 Kurang     : {rupiah(kurang):<20}│\n"
+                    "└─────────────────────────────────────┘</pre>\n\nSilakan topup saldo melalui menu\nTombol 💰 TOPUP SALDO.")
+                kb = InlineKeyboardMarkup([[B("💰 TOPUP SALDO","isi_saldo",style="success")],[B("🔙 Kembali","menu|main",style="danger")]])
+                await u.message.reply_text(msg_saldo,reply_markup=kb,parse_mode="HTML"); return
             c.user_data["created_in_session"] = True
             if proto == "ssh":
                 await do_create(u.effective_chat,uid,u.effective_user,un,pw,hari,sk=sk)
@@ -2107,7 +2103,7 @@ BOTPYEOF
 chmod +x /root/bot.py
 
 python3 -m py_compile /root/bot.py 2>&1 | tee /root/bot_compile.log >/dev/null
-[ -s /root/bot_compile.log ] && echo -e "  ${RED}❌ Bot error — cek /root/bot_compile.log${NC}" || echo -e "  ${GREEN}✓${NC}  Bot.py OK"
+[ -s /root/bot_compile.log ] && echo -e "  ${RED}❌ Bot error${NC}" || echo -e "  ${GREEN}✓${NC}  Bot.py OK"
 
 # 8. START BOT
 cat > /etc/systemd/system/vpnbot.service << 'SVCEOF'
@@ -2201,14 +2197,12 @@ show_banner(){ local tgl=$(date '+%d %b %Y  %H:%M:%S'); echo ""
     printf "          ${PK}SC ${WH}SANSXML VPN BOT STORE${N}\n"
     printf "${PU}╰${l}╯${N}\n"
     echo -e "           ${PU2}sansxml${N}  ${CY}◆${N}  ${PU2}VPS${N}  ${CY}◆${N}  ${WH}${tgl}${N}"; echo ""; }
-show_menu(){
-    clear
+show_menu(){ clear
     local ip=$(get_ip); local up=$(get_uptime)
     local os=$(grep PRETTY_NAME /etc/os-release|cut -d= -f2|tr -d '"')
     local krn=$(uname -r|cut -d- -f1); local core=$(nproc)
     local load=$(cat /proc/loadavg|awk '{print $1, $2, $3}')
-    local rp=$(get_ram_pct); local rh=$(get_ram_h)
-    local dp=$(get_disk_pct); local dh=$(get_disk_h)
+    local rp=$(get_ram_pct); local rh=$(get_ram_h); local dp=$(get_disk_pct); local dh=$(get_disk_h)
     local tgl=$(date '+%d %b %Y  %H:%M:%S')
     local bus=$(get_bot_users); local acc=$(get_accounts); local blk=$(get_blocked); local onl=$(get_online)
     local today=$(get_traffic_today); local month=$(get_traffic_month)
@@ -2244,8 +2238,7 @@ show_menu(){
     printf " ${YE}[02]${N} ${WH}%-25s${N} ${YE}[04]${N} ${WH}%s${N}\n" "VPS INFORMATION" "SERVICE STATUS"
     printf " ${YE}[05]${N} ${WH}%-25s${N} ${YE}[06]${N} ${WH}%s${N}\n" "UBAH TOKEN BOT" "EXIT"
     box_bot; echo ""
-    echo -ne "${PK}◆${N} ${PU2}Select${N} ${CY}[1-6]${N} ${PK}›${N} "
-}
+    echo -ne "${PK}◆${N} ${PU2}Select${N} ${CY}[1-6]${N} ${PK}›${N} "; }
 show_vps_info(){ clear; show_banner; box_top "VPS INFORMATION"
     kv "OS" "$(grep PRETTY_NAME /etc/os-release|cut -d= -f2|tr -d '"')"
     kv "Kernel" "$(uname -r)"; kv "Arch" "$(uname -m)"; kv "Hostname" "$(hostname)"
@@ -2257,19 +2250,16 @@ show_vps_info(){ clear; show_banner; box_top "VPS INFORMATION"
     kv "Used" "$(awk "BEGIN{printf \"%.1f\",$uk/1024/1024}") GB ($(get_ram_pct)%)"
     kv "Free" "$(awk "BEGIN{printf \"%.1f\",($tk-$uk)/1024/1024}") GB"
     box_mid "DISK"
-    kv "Total" "$(df -h /|tail -1|awk '{print $2}')"
-    kv "Used" "$(df -h /|tail -1|awk '{print $3}') ($(get_disk_pct)%)"
+    kv "Total" "$(df -h /|tail -1|awk '{print $2}')"; kv "Used" "$(df -h /|tail -1|awk '{print $3}') ($(get_disk_pct)%)"
     kv "Free" "$(df -h /|tail -1|awk '{print $4}')"
     box_mid "NETWORK"; kvc "Public IP" "$(get_ip)" "${GR}"
     kv "SSH Port" "22"; kv "WS-SSH" "80, 8080"; kv "SSL" "443, 8443"
     kv "UDPGW" "7300"; kv "Xray" "10001-10007"
-    box_bot; echo ""
-    echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read }
+    box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read; }
 show_bandwidth(){ clear; show_banner; box_top "BANDWIDTH MONITOR"
     kv "Hari Ini" "$(get_traffic_today)"; kv "Bulan Ini" "$(get_traffic_month)"
     kvc "Status" "Monitoring Aktif" "${GR}"
-    box_bot; echo ""
-    echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read }
+    box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read; }
 show_services(){ clear; show_banner; box_top "SERVICE STATUS"
     local svcs=("vpnbot:Telegram Bot" "ws-ssh:WS-SSH 80" "ws-ssh-alt:WS-SSH 8080" "stunnel4:SSL Tunnel" "udpgw:UDP Gateway" "xray:Xray VMess/VLESS/Trojan" "ssh:SSH Service")
     for e in "${svcs[@]}"; do
@@ -2278,8 +2268,7 @@ show_services(){ clear; show_banner; box_top "SERVICE STATUS"
         if [ "$st" = "active" ]; then printf " ${GR}●${N} ${WH}%-24s${N} ${GR}%s${N}\n" "$l" "$st"
         else printf " ${RE}●${N} ${WH}%-24s${N} ${RE}%s${N}\n" "$l" "$st"; fi
     done
-    box_bot; echo ""
-    echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read }
+    box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read; }
 change_token(){ clear; show_banner; box_top "UBAH TOKEN BOT"
     local curr=$(python3 -c "import json
 try: print(json.load(open('/root/vpnbot_config.json')).get('bot_token','-'))
@@ -2302,8 +2291,7 @@ json.dump(d,open(f,'w'),indent=2,ensure_ascii=False)
     local st=$(systemctl is-active vpnbot 2>/dev/null)
     if [ "$st" = "active" ]; then kvc "Result" "✓ TOKEN DIPERBARUI" "${GR}"
     else kvc "Result" "✗ GAGAL" "${RE}"; fi
-    box_bot; echo ""
-    echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read }
+    box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read; }
 stop_bot_clean(){ clear; show_banner; box_top "STOP BOT & CLEAN CACHE"
     box_row "${YE}Bot akan dimatikan & cache dibersihkan${N}"
     box_mid "AKAN DILAKUKAN"
@@ -2337,7 +2325,7 @@ stop_bot_clean(){ clear; show_banner; box_top "STOP BOT & CLEAN CACHE"
     kvc "Result" "VPS BERSIH" "${GR}"
     box_bot; echo ""
     echo -e "  ${YE}Start bot:${N} ${PK}systemctl start vpnbot${N}"; echo ""
-    echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read }
+    echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read; }
 while true; do
     show_menu
     read choice
