@@ -1,0 +1,21 @@
+{
+  "trial-pib5": {
+    "user_id": 6144358600,
+    "username": "trial-pib5",
+    "password": "trialpib5",
+    "exp": "2026-09-30",
+    "exp_ts": "2026-09-30 22:44:58",
+    "days": 1,
+    "limit_ip": 2,
+    "harga": 0,
+    "created_at": "2026-09-30T22:14:59.025170",
+    "first_name": "********",
+    "username_tg": "unokwn",
+    "manual": false,
+    "free_owner": true,
+    "is_trial": true,
+    "server_key": "sg_2ip",
+    "server": "🇸🇬 PRIME SG-02",
+    "proto": "ssh"
+  }
+}
