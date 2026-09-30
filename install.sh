@@ -20,57 +20,41 @@ echo -e "  ${CYAN}    SANSXML VPN STORE — AUTO INSTALL v10${NC}"
 echo -e "  ${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
-# 1. CLEANUP
-(
-  for s in ws-ssh ws-ssh-alt stunnel4 udpgw vpnbot xray zivpn; do
-    systemctl stop "$s" 2>/dev/null; systemctl disable "$s" 2>/dev/null
-    rm -f "/etc/systemd/system/${s}.service"
-  done
-  systemctl daemon-reload 2>/dev/null; systemctl reset-failed 2>/dev/null
-  fuser -k 80/tcp 8080/tcp 443/tcp 8443/tcp 7300/udp 2>/dev/null
-  pkill -f ws-ssh.py 2>/dev/null; pkill -f badvpn-udpgw 2>/dev/null
-  pkill -f vpnbot 2>/dev/null; pkill -f zivpn 2>/dev/null
-  sleep 1
-  rm -f /usr/local/bin/ws-ssh.py /usr/bin/badvpn-udpgw /usr/local/bin/badvpn-udpgw
-  rm -f /etc/stunnel/stunnel.conf /etc/stunnel/stunnel.pem
-  rm -f /root/bot.py /root/vpnbot.log /root/bot_compile.log
-  rm -f /root/vpnbot_*.json /root/vpnbot_backup.sh /etc/sansxml-backup.conf
-  rm -rf /root/vpnbot_backup
-  rm -f /root/.ssh/id_bot /root/.ssh/id_bot.pub
-  rm -f /etc/ssh/sshd_config.d/99-vpnbot.conf
-  rm -rf /tmp/badvpn /etc/sansxml-* /etc/motd.d
-  rm -f /etc/issue /etc/issue.net /etc/motd
-  for u in $(awk -F: '$3>=1000 && $3<60000 {print $1}' /etc/passwd); do
-    pkill -9 -u "$u" 2>/dev/null; userdel -r "$u" 2>/dev/null
-  done
-  mkdir -p /root/.ssh; chmod 700 /root/.ssh
-  > /root/.ssh/authorized_keys; chmod 600 /root/.ssh/authorized_keys
-  cat > /root/.bashrc << 'RCEOF'
-case $- in *i*) ;; *) return;; esac
-HISTCONTROL=ignoreboth
-shopt -s histappend
-HISTSIZE=1000; HISTFILESIZE=2000
-[ -x /usr/bin/lesspipe ] && eval "$(SHELL=/bin/sh lesspipe)"
-if [ -z "${debian_chroot:-}" ] && [ -r /etc/debian_chroot ]; then debian_chroot=$(cat /etc/debian_chroot); fi
-case "$TERM" in xterm-color|*-256color) color_prompt=yes;; esac
-if [ "$color_prompt" = yes ]; then
-    PS1='${debian_chroot:+($debian_chroot)}\[\033[01;32m\]\u@\h\[\033[00m\]:\[\033[01;34m\]\w\[\033[00m\]\$ '
-else
-    PS1='${debian_chroot:+($debian_chroot)}\u@\h:\w\$ '
-fi
-alias ll='ls -alF'; alias la='ls -A'; alias l='ls -CF'
-RCEOF
-  crontab -r 2>/dev/null
-  ufw --force disable >/dev/null 2>&1; ufw --force reset >/dev/null 2>&1
-  iptables -F 2>/dev/null; iptables -X 2>/dev/null
-  iptables -t nat -F 2>/dev/null; iptables -t nat -X 2>/dev/null
-) & spin $! "Bersihkan VPS"
+# 1. INSTALLER MENU
+# Tidak melakukan "bersih-bersih VPS" otomatis. Installer hanya menyiapkan/
+# memperbarui komponen yang dibutuhkan agar data dan konfigurasi VPS tidak terhapus.
+echo -e "  ${CYAN}┌──────────────────────────────────────────────────────────┐${NC}"
+echo -e "  ${CYAN}│${NC}              ${WHITE}SANSXML VPN STORE${NC}                  ${CYAN}│${NC}"
+echo -e "  ${CYAN}│${NC}              ${YELLOW}AUTO INSTALLER v10${NC}                 ${CYAN}│${NC}"
+echo -e "  ${CYAN}├──────────────────────────────────────────────────────────┤${NC}"
+echo -e "  ${CYAN}│${NC}  ${GREEN}01${NC}  System & Dependencies                              ${CYAN}│${NC}"
+echo -e "  ${CYAN}│${NC}  ${GREEN}02${NC}  SSH / SSL / UDPGW                                  ${CYAN}│${NC}"
+echo -e "  ${CYAN}│${NC}  ${GREEN}03${NC}  Firewall & Network                                 ${CYAN}│${NC}"
+echo -e "  ${CYAN}│${NC}  ${GREEN}04${NC}  Xray Core                                          ${CYAN}│${NC}"
+echo -e "  ${CYAN}│${NC}  ${GREEN}05${NC}  Telegram VPN Bot                                   ${CYAN}│${NC}"
+echo -e "  ${CYAN}├──────────────────────────────────────────────────────────┤${NC}"
+echo -e "  ${CYAN}│${NC}  ${MAGENTA}◆${NC} SANSXML VPN STORE  •  PREMIUM VPN SYSTEM            ${CYAN}│${NC}"
+echo -e "  ${CYAN}└──────────────────────────────────────────────────────────┘${NC}"
+echo ""
 
 # 2. DEPENDENCIES
 echo ""
-echo -e "  ${YELLOW}▸ Install dependencies${NC}"
+echo -e "  ${CYAN}╭─[ 01 • SYSTEM & DEPENDENCIES ]────────────────────────────╮${NC}"
+echo -e "  ${CYAN}│${NC} Menyiapkan package sistem, Python API, SSH key & vnstat.  ${CYAN}│${NC}"
+echo -e "  ${CYAN}╰────────────────────────────────────────────────────────────╯${NC}"
 ( apt-get update -y >/dev/null 2>&1 ) & spin $! "Update repository"
-( apt-get install -y python3 python3-pip python3-venv sshpass curl wget unzip stunnel4 net-tools cron ufw iptables openssl cmake build-essential git pkg-config bc jq who procps dnsutils vnstat uuid-runtime socat >/dev/null 2>&1 ) & spin $! "Install packages"
+_pkg_install(){
+  dpkg --configure -a >/dev/null 2>&1 || true
+  apt-get -f install -y >/dev/null 2>&1 || true
+  apt-get install -y --no-install-recommends python3 python3-pip python3-venv sshpass curl wget unzip stunnel4 net-tools cron ufw iptables openssl cmake build-essential git pkg-config bc procps dnsutils vnstat uuid-runtime socat >/tmp/sansxml-apt-install.log 2>&1
+}
+_pkg_install & _pkg_pid=$!
+spin $_pkg_pid "Install packages" || {
+  echo -e "  ${RED}┌─ PACKAGE ERROR ─────────────────────────────────────────┐${NC}"
+  tail -n 12 /tmp/sansxml-apt-install.log 2>/dev/null | sed 's/^/  │ /'
+  echo -e "  ${RED}└─────────────────────────────────────────────────────────┘${NC}"
+  exit 1
+}
 ( pip3 install --break-system-packages --upgrade "python-telegram-bot>=21.5" requests qrcode pillow >/dev/null 2>&1 \
     || pip3 install --upgrade "python-telegram-bot>=21.5" requests qrcode pillow >/dev/null 2>&1 ) & spin $! "Install Telegram API"
 ( mkdir -p /root/.ssh; chmod 700 /root/.ssh
@@ -82,7 +66,9 @@ echo -e "  ${YELLOW}▸ Install dependencies${NC}"
 
 # 3. VPN SERVICES
 echo ""
-echo -e "  ${YELLOW}▸ Install VPN services${NC}"
+echo -e "  ${CYAN}╭─[ 02 • VPN SERVICES ]─────────────────────────────────────╮${NC}"
+echo -e "  ${CYAN}│${NC} WS-SSH • SSL • UDPGW • Firewall • Service manager       ${CYAN}│${NC}"
+echo -e "  ${CYAN}╰────────────────────────────────────────────────────────────╯${NC}"
 
 ( cat > /usr/local/bin/ws-ssh.py << 'WSEOF'
 #!/usr/bin/env python3
@@ -213,7 +199,9 @@ DOMAIN="sgivip.naaofficial.web.id"
 
 # 4. INSTALL XRAY
 echo ""
-echo -e "  ${YELLOW}▸ Install Xray${NC}"
+echo -e "  ${CYAN}╭─[ 03 • XRAY CORE ]────────────────────────────────────────╮${NC}"
+echo -e "  ${CYAN}│${NC} VMESS • VLESS • TROJAN • TLS / WS / gRPC               ${CYAN}│${NC}"
+echo -e "  ${CYAN}╰────────────────────────────────────────────────────────────╯${NC}"
 (
   set -e
   if ! command -v xray >/dev/null 2>&1; then
@@ -335,7 +323,9 @@ systemctl restart ssh 2>/dev/null || systemctl restart sshd
 
 # 6. BOT CONFIG
 echo ""
-echo -e "  ${YELLOW}▸ Konfigurasi Bot${NC}"
+echo -e "  ${CYAN}╭─[ 04 • TELEGRAM VPN BOT ]─────────────────────────────────╮${NC}"
+echo -e "  ${CYAN}│${NC} Konfigurasi bot, server, owner & backup                  ${CYAN}│${NC}"
+echo -e "  ${CYAN}╰────────────────────────────────────────────────────────────╯${NC}"
 echo ""
 read -r -p "$(echo -e ${GREEN}'  Bot Token Telegram : '${NC})" BOT_TOKEN < /dev/tty
 if [ -z "$BOT_TOKEN" ]; then echo -e "  ${RED}❌ Token tidak boleh kosong${NC}"; exit 1; fi
