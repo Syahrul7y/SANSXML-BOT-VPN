@@ -193,7 +193,7 @@ EOF
 
 ( ufw default allow incoming >/dev/null 2>&1
   ufw default allow outgoing >/dev/null 2>&1
-  for p in 22 80 443 8080 8443 10001 10002 10003 10004 10005 10006 10007; do ufw allow $p/tcp >/dev/null 2>&1; done
+  for p in 22 80 443 8080 8443 8444 8445 10001 10002 10003 10004 10005 10006 10007; do ufw allow $p/tcp >/dev/null 2>&1; done
   ufw allow 7300/udp >/dev/null 2>&1; ufw allow 1:65535/udp >/dev/null 2>&1
   ufw --force enable >/dev/null 2>&1 ) & spin $! "Configure firewall"
 
@@ -203,49 +203,68 @@ EOF
   [ -f /usr/bin/badvpn-udpgw ] && systemctl enable udpgw >/dev/null 2>&1 && systemctl restart udpgw
   sleep 2 ) & spin $! "Start VPN services"
 
+DOMAIN="sgivip.naaofficial.web.id"
+
 # 4. INSTALL XRAY
 echo ""
 echo -e "  ${YELLOW}▸ Install Xray${NC}"
 (
-  if [ ! -f /usr/local/bin/xray ]; then
-    bash -c "$(curl -L https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install >/dev/null 2>&1
+  set -e
+  if ! command -v xray >/dev/null 2>&1; then
+    bash -c "$(curl -fsSL https://github.com/XTLS/Xray-install/raw/main/install-release.sh)" @ install
   fi
-  systemctl enable xray >/dev/null 2>&1
   systemctl stop xray 2>/dev/null || true
+  systemctl enable xray >/dev/null 2>&1 || true
   mkdir -p /etc/xray/accounts /var/lib/xray
-  [ ! -f /etc/xray/cert.pem ] && openssl req -x509 -newkey rsa:2048 -nodes \
-    -keyout /etc/xray/cert.key -out /etc/xray/cert.pem \
-    -days 3650 -subj "/CN=sansxml.local" 2>/dev/null
-  cat > /etc/xray/config.json << 'XRAYEOF'
+  # TLS certificate: try Let's Encrypt first; fallback to a local certificate.
+  if command -v certbot >/dev/null 2>&1; then :; else apt-get install -y certbot >/dev/null 2>&1 || true; fi
+  systemctl stop ws-ssh ws-ssh-alt stunnel4 2>/dev/null || true
+  if [ -n "${DOMAIN:-}" ] && command -v certbot >/dev/null 2>&1; then
+    certbot certonly --standalone --non-interactive --agree-tos --register-unsafely-without-email -d "$DOMAIN" >/dev/null 2>&1 || true
+  fi
+  if [ -f "/etc/letsencrypt/live/${DOMAIN}/fullchain.pem" ] && [ -f "/etc/letsencrypt/live/${DOMAIN}/privkey.pem" ]; then
+    XRAY_CERT="/etc/letsencrypt/live/${DOMAIN}/fullchain.pem"
+    XRAY_KEY="/etc/letsencrypt/live/${DOMAIN}/privkey.pem"
+  else
+    openssl req -x509 -newkey rsa:2048 -nodes -days 3650 \
+      -keyout /etc/xray/cert.key -out /etc/xray/cert.pem \
+      -subj "/CN=${DOMAIN:-sansxml.local}" >/dev/null 2>&1
+    XRAY_CERT="/etc/xray/cert.pem"
+    XRAY_KEY="/etc/xray/cert.key"
+  fi
+  cat > /etc/xray/config.json << XRAYEOF
 {
-  "log": { "loglevel": "warning" },
-  "inbounds": [
+  "log":{"loglevel":"warning"},
+  "inbounds":[
+    {"tag":"vmess-ws-tls","listen":"0.0.0.0","port":8443,"protocol":"vmess","settings":{"clients":[]},"streamSettings":{"network":"ws","security":"tls","tlsSettings":{"certificates":[{"certificateFile":"${XRAY_CERT}","keyFile":"${XRAY_KEY}"}]},"wsSettings":{"path":"/vmess"}}},
     {"tag":"vmess-ws","listen":"0.0.0.0","port":10001,"protocol":"vmess","settings":{"clients":[]},"streamSettings":{"network":"ws","wsSettings":{"path":"/vmess"}}},
-    {"tag":"vmess-grpc","listen":"0.0.0.0","port":10002,"protocol":"vmess","settings":{"clients":[]},"streamSettings":{"network":"grpc","grpcSettings":{"serviceName":"vmess-grpc"}}},
+    {"tag":"vmess-grpc","listen":"0.0.0.0","port":10002,"protocol":"vmess","settings":{"clients":[]},"streamSettings":{"network":"grpc","security":"tls","tlsSettings":{"certificates":[{"certificateFile":"${XRAY_CERT}","keyFile":"${XRAY_KEY}"}]},"grpcSettings":{"serviceName":"vmess-grpc"}}},
+    {"tag":"vless-ws-tls","listen":"0.0.0.0","port":8444,"protocol":"vless","settings":{"clients":[],"decryption":"none"},"streamSettings":{"network":"ws","security":"tls","tlsSettings":{"certificates":[{"certificateFile":"${XRAY_CERT}","keyFile":"${XRAY_KEY}"}]},"wsSettings":{"path":"/vless"}}},
     {"tag":"vless-ws","listen":"0.0.0.0","port":10003,"protocol":"vless","settings":{"clients":[],"decryption":"none"},"streamSettings":{"network":"ws","wsSettings":{"path":"/vless"}}},
-    {"tag":"vless-grpc","listen":"0.0.0.0","port":10004,"protocol":"vless","settings":{"clients":[],"decryption":"none"},"streamSettings":{"network":"grpc","grpcSettings":{"serviceName":"vless-grpc"}}},
-    {"tag":"trojan-tcp","listen":"0.0.0.0","port":10005,"protocol":"trojan","settings":{"clients":[]},"streamSettings":{"network":"tcp"}},
-    {"tag":"trojan-ws","listen":"0.0.0.0","port":10006,"protocol":"trojan","settings":{"clients":[]},"streamSettings":{"network":"ws","wsSettings":{"path":"/trojan"}}},
-    {"tag":"trojan-grpc","listen":"0.0.0.0","port":10007,"protocol":"trojan","settings":{"clients":[]},"streamSettings":{"network":"grpc","grpcSettings":{"serviceName":"trojan-grpc"}}}
+    {"tag":"vless-grpc","listen":"0.0.0.0","port":10004,"protocol":"vless","settings":{"clients":[],"decryption":"none"},"streamSettings":{"network":"grpc","security":"tls","tlsSettings":{"certificates":[{"certificateFile":"${XRAY_CERT}","keyFile":"${XRAY_KEY}"}]},"grpcSettings":{"serviceName":"vless-grpc"}}},
+    {"tag":"trojan-tcp","listen":"0.0.0.0","port":10005,"protocol":"trojan","settings":{"clients":[]},"streamSettings":{"network":"tcp","security":"tls","tlsSettings":{"certificates":[{"certificateFile":"${XRAY_CERT}","keyFile":"${XRAY_KEY}"}]}}},
+    {"tag":"trojan-ws","listen":"0.0.0.0","port":8445,"protocol":"trojan","settings":{"clients":[]},"streamSettings":{"network":"ws","security":"tls","tlsSettings":{"certificates":[{"certificateFile":"${XRAY_CERT}","keyFile":"${XRAY_KEY}"}]},"wsSettings":{"path":"/trojan"}}},
+    {"tag":"trojan-grpc","listen":"0.0.0.0","port":10007,"protocol":"trojan","settings":{"clients":[]},"streamSettings":{"network":"grpc","security":"tls","tlsSettings":{"certificates":[{"certificateFile":"${XRAY_CERT}","keyFile":"${XRAY_KEY}"}]},"grpcSettings":{"serviceName":"trojan-grpc"}}}
   ],
-  "outbounds": [
-    {"protocol":"freedom","tag":"direct"},
-    {"protocol":"blackhole","tag":"blocked"}
-  ]
+  "outbounds":[{"protocol":"freedom","tag":"direct"}]
 }
 XRAYEOF
   echo '{"protocol":"vmess","accounts":[]}' > /etc/xray/accounts/vmess.json
   echo '{"protocol":"vless","accounts":[]}' > /etc/xray/accounts/vless.json
   echo '{"protocol":"trojan","accounts":[]}' > /etc/xray/accounts/trojan.json
-  xray run -test -config /etc/xray/config.json >/dev/null 2>&1
+  xray run -test -config /etc/xray/config.json
   systemctl restart xray
   sleep 2
+  systemctl is-active --quiet xray
 ) & spin $! "Install Xray"
+
+# Restore SSH/WS/SSL services after certificate setup
+( systemctl daemon-reload; systemctl enable ws-ssh ws-ssh-alt stunnel4 >/dev/null 2>&1; systemctl restart ws-ssh ws-ssh-alt stunnel4 ) & spin $! "Start SSH/SSL services"
 
 # 5. BANNER
 rm -rf /etc/update-motd.d/* 2>/dev/null
 cat > /etc/issue.net << 'BANEOF'
-<br><font color="#ff00aa"><b>                        ▬▬▬▬▬▬ஜ۩۞۩ஜ▬▬▬▬▬▬</b></font><br><font color="#ffffff"><b>                          --- 卐 </b></font><font color="#ffff00"><b>SANSXML VPN STORE</b></font><font color="#ffffff"><b> 卐 ---</b></font><br><font color="#ff00aa"><b>                        ▬▬▬▬▬▬ஜ۩۞۩ஜ▬▬▬▬▬▬</b></font><br><font color="#ffffff"><b>                            ── PREMIUM VPN SERVER ──</b></font><br><font color="#ffffff"><b>                             --- 卍 TERM OF SERVICE 卐 ---</b></font><br><font color="#ffffff"><b>                                      NO MULTI LOGIN !!</b></font><br><font color="#ffffff"><b>                                NO HACKING AND CARDING</b></font><br><font color="#ffff00"><b>                            👉 MULTI LOGIN BANNED 👈</b></font><br><font color="#ff00aa"><b>                        ▬▬▬▬▬▬ஜ۩۞۩ஜ▬▬▬▬▬▬</b></font><br><font color="#ffffff"><b>                    ORDER CONFIG PREMIUM: </b></font><font color="#00ff44"><b>wa.me/6289527419748</b></font><br><font color="#ffffff"><b>                         BOT ORDER VPN: </b></font><font color="#00ff44"><b>t.me/unokwn</b></font><br><br>
+<br><font color="#ff00aa"><b>                        ▬▬▬▬▬▬ஜ۩۞۩ஜ▬▬▬▬▬▬</b></font><br><font color="#ffffff"><b>                         --- 卐 </b></font><font color="#ffff00"><b>SANSXML VPN STORE</b></font><font color="#ffffff"><b> 卐 ---</b></font><br><font color="#ff00aa"><b>                        ▬▬▬▬▬▬ஜ۩۞۩ஜ▬▬▬▬▬▬</b></font><br><font color="#ffffff"><b>                              卍 TERM OF SERVICE 卐</b></font><br><font color="#ffffff"><b>                                  PREMIUM VPN</b></font><br><font color="#ffffff"><b>                                NO MULTI LOGIN !!</b></font><br><font color="#ffffff"><b>                           NO HACKING AND CARDING</b></font><br><font color="#ffff00"><b>                              👉 MULTI LOGIN BANNED 👈</b></font><br><font color="#ff00aa"><b>                        ▬▬▬▬▬▬ஜ۩۞۩ஜ▬▬▬▬▬▬</b></font><br><font color="#ffffff"><b>                   ORDER CONFIG PREMIUM: </b></font><font color="#00ff44"><b>wa.me/6289527419748</b></font><br><font color="#ffffff"><b>                         BOT ORDER VPN: </b></font><font color="#00ff44"><b>t.me/unokwn</b></font><br><br>
 BANEOF
 cp /etc/issue.net /etc/motd
 sed -i '/^[[:space:]]*ListenAddress/d' /etc/ssh/sshd_config
@@ -343,7 +362,7 @@ USERS_FILE="/root/vpnbot_users.json"; BAL_FILE="/root/vpnbot_balance.json"
 ACCOUNTS_FILE="/root/vpnbot_accounts.json"; TRIAL_FILE="/root/vpnbot_trial.json"
 TRX_FILE="/root/vpnbot_trx.json"
 XRAY_CONFIG = "/etc/xray/config.json"
-XRAY_PORTS = {"vmess_ws":10001,"vmess_grpc":10002,"vless_ws":10003,"vless_grpc":10004,"trojan_tcp":10005,"trojan_ws":10006,"trojan_grpc":10007}
+XRAY_PORTS = {"vmess_ws":10001,"vmess_tls":8443,"vmess_grpc":10002,"vless_ws":10003,"vless_tls":8444,"vless_grpc":10004,"trojan_tcp":10005,"trojan_ws":8445,"trojan_grpc":10007}
 
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO,
     handlers=[logging.StreamHandler(), logging.FileHandler("/root/vpnbot.log", encoding="utf-8")])
@@ -519,7 +538,7 @@ def xray_build_vmess(host, port, u, path, tls, remark):
            "tls":"tls" if tls else "","sni":host if tls else ""}
     return "vmess://" + base64.b64encode(json.dumps(cfg).encode()).decode()
 def xray_build_vmess_grpc(host, u, svc, remark):
-    cfg = {"v":"2","ps":remark,"add":host,"port":"443","id":u,"aid":"0","scy":"auto",
+    cfg = {"v":"2","ps":remark,"add":host,"port":str(XRAY_PORTS["vmess_grpc"]),"id":u,"aid":"0","scy":"auto",
            "net":"grpc","type":"gun","host":host,"path":svc,"tls":"tls","sni":host}
     return "vmess://" + base64.b64encode(json.dumps(cfg).encode()).decode()
 def xray_build_vless(host, port, u, path, tls, remark):
@@ -536,7 +555,7 @@ def xray_build_trojan(host, port, pwd, path, tls, remark):
     return f"trojan://{pwd}@{host}:{port}?{p}#{remark}"
 def xray_build_trojan_grpc(host, pwd, svc, remark):
     p = f"security=tls&type=grpc&serviceName={svc}&sni={host}"
-    return f"trojan://{pwd}@{host}:443?{p}#{remark}"
+    return f"trojan://{pwd}@{host}:{XRAY_PORTS['trojan_grpc']}?{p}#{remark}"
 
 # SSH
 def ssh_create(u, p, days, is_trial=False, key="sg_1ip"):
@@ -547,8 +566,9 @@ def ssh_create(u, p, days, is_trial=False, key="sg_1ip"):
         exp_date = (now + timedelta(days=days)).date(); exp_ts = exp_date.strftime("%Y-%m-%d") + " 23:59:59"
     exp = exp_date.strftime("%Y-%m-%d")
     pw_b64 = base64.b64encode(p.encode()).decode()
+    expiry_cmd = f"chage -E '{exp}' {u} 2>&1 ;" if not is_trial else ""
     cmd = (f"userdel -r {u} 2>/dev/null; useradd -m -s /bin/bash {u} 2>&1 ; "
-           f"chage -E '{exp}' {u} 2>&1 ; chage -M 99999 {u} 2>&1 ; chage -I -1 {u} 2>&1 ; "
+           f"{expiry_cmd} chage -M 99999 {u} 2>&1 ; chage -I -1 {u} 2>&1 ; "
            f"PW=$(echo '{pw_b64}' | base64 -d) ; printf '%s:%s\\n' '{u}' \"$PW\" | chpasswd 2>&1 ; "
            f"passwd -u {u} 2>&1 ; usermod -U {u} 2>&1 ; echo DONE:$?")
     c,o,e = ssh_run(cmd, key)
@@ -975,17 +995,23 @@ def saldo_text(uid, nom=""):
             f"Minimal topup {rupiah(MIN_TOPUP)}\n\n"
             f"❖ <i>Saldo dapat digunakan untuk membuat akun VPN</i> ❖\n</blockquote>")
 
-def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="sg_1ip"):
+def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="sg_1ip", exp_ts="", created_at=""):
     srv = SERVERS.get(server_key, {})
     head = "TRIAL" if is_trial else ("MANUAL" if manual else "PREMIUM")
     BULAN = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"]
     try:
         ed = datetime.strptime(exp,"%Y-%m-%d")
         exp_fmt = f"{ed.day} {BULAN[ed.month-1]}, {ed.year}"
-        try: di = int(dl.split()[0])
-        except: di = 30
-        cr = datetime.now() - timedelta(days=di)
-        created_fmt = f"{cr.day} {BULAN[cr.month-1]}, {cr.year}"
+        try:
+            cr = datetime.fromisoformat(created_at) if created_at else datetime.now()
+        except:
+            cr = datetime.now()
+        created_fmt = f"{cr.day} {BULAN[cr.month-1]}, {cr.year}" + (f" {cr:%H:%M}" if is_trial else "")
+        if is_trial and exp_ts:
+            try:
+                et = datetime.strptime(exp_ts, "%Y-%m-%d %H:%M:%S")
+                exp_fmt = f"{et.day} {BULAN[et.month-1]}, {et.year} {et:%H:%M}"
+            except: pass
     except: exp_fmt = exp; created_fmt = "-"
     ssh_ovpn_val = srv.get("ssh_ovpn") or srv.get("name","SG NEWMEDIA")
     host = srv.get("domain") or SSH_HOST
@@ -1033,7 +1059,7 @@ def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="sg_
     ]
     return "\n".join(L)
 
-def xray_caption(proto, un, pw, cred, exp, days, sk, is_trial=False):
+def xray_caption(proto, un, pw, cred, exp, days, sk, is_trial=False, exp_ts="", created_at=""):
     s = SERVERS.get(sk,{})
     host = s.get("domain") or SSH_HOST
     city = s.get("city","Singapore"); isp = s.get("isp","DigitalOcean LLC")
@@ -1044,29 +1070,38 @@ def xray_caption(proto, un, pw, cred, exp, days, sk, is_trial=False):
     try:
         ed = datetime.strptime(exp,"%Y-%m-%d")
         ef = f"{ed.day} {BULAN[ed.month-1]}, {ed.year}"
-        cr = datetime.now(); cf = f"{cr.day} {BULAN[cr.month-1]}, {cr.year}"
+        try:
+            cr = datetime.fromisoformat(created_at) if created_at else datetime.now()
+        except:
+            cr = datetime.now()
+        cf = f"{cr.day} {BULAN[cr.month-1]}, {cr.year}" + (f" {cr:%H:%M}" if is_trial else "")
+        if is_trial and exp_ts:
+            try:
+                et = datetime.strptime(exp_ts, "%Y-%m-%d %H:%M:%S")
+                ef = f"{et.day} {BULAN[et.month-1]}, {et.year} {et:%H:%M}"
+            except: pass
     except: ef = exp; cf = "-"
     head = {"vmess":"VMESS","vless":"VLESS","trojan":"TROJAN"}.get(proto,proto.upper())
     lbl = "TRIAL" if is_trial else "PREMIUM"
     esc = lambda x: str(x).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
     if proto == "vmess":
-        url1 = xray_build_vmess(host,443,cred,'/vmess',True,f'{ssh_ovpn}-WSTLS')
+        url1 = xray_build_vmess(host,XRAY_PORTS['vmess_tls'],cred,'/vmess',True,f'{ssh_ovpn}-WSTLS')
         url2 = xray_build_vmess(host,XRAY_PORTS['vmess_ws'],cred,'/vmess',False,f'{ssh_ovpn}-WS')
         url3 = xray_build_vmess_grpc(host,cred,'vmess-grpc',f'{ssh_ovpn}-gRPC')
         t1 = "VMESS WS TLS"; t2 = "VMESS WS"; t3 = "VMESS gRPC TLS"
-        server_lines = [f"│ <b>Host</b>       : {esc(host)}", "│ <b>Path</b>       : /vmess", "│ <b>Path gRPC</b>  : vmess-grpc", "│ <b>WS TLS</b>     : 443", f"│ <b>WS</b>         : {XRAY_PORTS['vmess_ws']}", "│ <b>gRPC TLS</b>   : 443", f"│ <b>gRPC</b>       : {XRAY_PORTS['vmess_grpc']}"]
+        server_lines = [f"│ <b>Host</b>       : {esc(host)}", "│ <b>Path</b>       : /vmess", "│ <b>Path gRPC</b>  : vmess-grpc", f"│ <b>WS TLS</b>     : {XRAY_PORTS['vmess_tls']}", f"│ <b>WS</b>         : {XRAY_PORTS['vmess_ws']}", f"│ <b>gRPC TLS</b>   : {XRAY_PORTS['vmess_grpc']}", f"│ <b>gRPC</b>       : {XRAY_PORTS['vmess_grpc']}"]
     elif proto == "vless":
-        url1 = xray_build_vless(host,443,cred,'/vless',True,f'{ssh_ovpn}-WSTLS')
+        url1 = xray_build_vless(host,XRAY_PORTS['vless_tls'],cred,'/vless',True,f'{ssh_ovpn}-WSTLS')
         url2 = xray_build_vless(host,XRAY_PORTS['vless_ws'],cred,'/vless',False,f'{ssh_ovpn}-WS')
         url3 = xray_build_vless_grpc(host,cred,'vless-grpc',f'{ssh_ovpn}-gRPC')
         t1 = "VLESS WS TLS"; t2 = "VLESS WS"; t3 = "VLESS gRPC TLS"
-        server_lines = [f"│ <b>Host</b>       : {esc(host)}", "│ <b>Path</b>       : /vless", "│ <b>Path gRPC</b>  : vless-grpc", "│ <b>WS TLS</b>     : 443", f"│ <b>WS</b>         : {XRAY_PORTS['vless_ws']}", "│ <b>gRPC TLS</b>   : 443", "│ <b>TCP TLS</b>    : 443"]
+        server_lines = [f"│ <b>Host</b>       : {esc(host)}", "│ <b>Path</b>       : /vless", "│ <b>Path gRPC</b>  : vless-grpc", f"│ <b>WS TLS</b>     : {XRAY_PORTS['vless_tls']}", f"│ <b>WS</b>         : {XRAY_PORTS['vless_ws']}", f"│ <b>gRPC TLS</b>   : {XRAY_PORTS['vless_grpc']}", "│ <b>TCP TLS</b>    : 443"]
     else:
         url1 = xray_build_trojan(host,XRAY_PORTS['trojan_tcp'],cred,'',True,f'{ssh_ovpn}-TCP')
-        url2 = xray_build_trojan(host,443,cred,'/trojan',True,f'{ssh_ovpn}-WS')
+        url2 = xray_build_trojan(host,XRAY_PORTS['trojan_ws'],cred,'/trojan',True,f'{ssh_ovpn}-WS')
         url3 = xray_build_trojan_grpc(host,cred,'trojan-grpc',f'{ssh_ovpn}-gRPC')
         t1 = "TROJAN TCP"; t2 = "TROJAN WS TLS"; t3 = "TROJAN gRPC TLS"
-        server_lines = [f"│ <b>Host</b>       : {esc(host)}", f"│ <b>Trojan TCP</b> : {XRAY_PORTS['trojan_tcp']}", "│ <b>Trojan WS</b>  : 443 /trojan", "│ <b>Trojan gRPC</b>: 443 trojan-grpc"]
+        server_lines = [f"│ <b>Host</b>       : {esc(host)}", f"│ <b>Trojan TCP</b> : {XRAY_PORTS['trojan_tcp']}", f"│ <b>Trojan WS</b>  : {XRAY_PORTS['trojan_ws']} /trojan", f"│ <b>Trojan gRPC</b>: {XRAY_PORTS['trojan_grpc']} trojan-grpc"]
     password_line = f"│ <b>Password</b>   : {esc(cred if proto == 'trojan' else pw)}"
     account_lines = [
         f"│ <b>City</b>       : {esc(city)}", f"│ <b>ISP</b>        : {esc(isp)}", f"│ <b>SSH OVPN</b>   : {esc(ssh_ovpn)}",
@@ -1103,8 +1138,9 @@ async def do_create(chat, uid, user, un, pw, hari, is_trial=False, sk="sg_1ip"):
     if not is_trial:
         ok,_ = reduce_bal(uid,price)
         if not ok: await m.edit_text("❌ Saldo berubah.",parse_mode="HTML"); return
+    created_at = datetime.now().isoformat()
     save_acc(un,{"user_id":uid,"username":un,"password":pw,"exp":r["exp"],"exp_ts":r.get("exp_ts",""),
-        "days":hari,"limit_ip":ip,"harga":price,"created_at":datetime.now().isoformat(),
+        "days":hari,"limit_ip":ip,"harga":price,"created_at":created_at,
         "first_name":user.first_name or "","username_tg":user.username or "","manual":r.get("manual",False),
         "free_owner":is_owner(uid),"is_trial":is_trial,"server_key":sk,"server":s.get("name","SG NEWMEDIA"),
         "proto":"ssh"})
@@ -1112,7 +1148,7 @@ async def do_create(chat, uid, user, un, pw, hari, is_trial=False, sk="sg_1ip"):
         add_trx(uid,user.first_name or "User",user.username or "","buat_akun",price,f"{hari}h {s.get('name','')}")
     dl = f"{TRIAL_DURATION_MIN} Minute" if is_trial else f"{hari} Hari"
     ex = r.get("exp_ts","")[:10] if is_trial else r["exp"]
-    await m.edit_text(acc_caption(un,pw,ex,dl,ip,r.get("manual",False),is_trial,sk),parse_mode="HTML")
+    await m.edit_text(acc_caption(un,pw,ex,dl,ip,r.get("manual",False),is_trial,sk,r.get("exp_ts", ""),created_at),parse_mode="HTML")
     asyncio.create_task(sync_push_async())
 async def do_extend(chat, uid, user, un, hari, sk):
     price = get_price(hari,sk)
@@ -1171,17 +1207,18 @@ async def do_create_xray(chat, uid, user, un, pw, hari, sk, proto, is_trial=Fals
         exp = (datetime.now()+timedelta(days=hari)).strftime("%Y-%m-%d")
         exp_ts = exp+" 23:59:59"
     key = f"{proto}_{un}"
+    created_at = datetime.now().isoformat()
     accs = load_json(ACCOUNTS_FILE,{})
     accs[key] = {"user_id":uid,"username":un,"password":pw,
         "uuid":cred if proto != "trojan" else "","proto":proto,"exp":exp,
         "exp_ts":exp_ts,"days":hari,"limit_ip":1,"harga":price,
-        "server_key":sk,"created_at":datetime.now().isoformat(),
+        "server_key":sk,"created_at":created_at,
         "first_name":user.first_name or "","username_tg":user.username or "",
         "is_trial":is_trial}
     save_json(ACCOUNTS_FILE,accs)
     if not is_trial:
         add_trx(uid,user.first_name or "User",user.username or "",f"{proto}_akun",price,f"{hari}h {s.get('name','')}")
-    await m.edit_text(xray_caption(proto,un,pw,cred,exp,hari,sk,is_trial=is_trial),parse_mode="HTML")
+    await m.edit_text(xray_caption(proto,un,pw,cred,exp,hari,sk,is_trial=is_trial,exp_ts=exp_ts,created_at=created_at),parse_mode="HTML")
     asyncio.create_task(sync_push_async())
 async def _del_acc(uid, un, user, chat):
     a = get_acc(un)
