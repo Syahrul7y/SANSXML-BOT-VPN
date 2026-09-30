@@ -5,7 +5,13 @@ YELLOW='\033[1;33m'; MAGENTA='\033[1;35m'; WHITE='\033[1;37m'; NC='\033[0m'
 
 spin(){ local pid=$1 msg="$2"; local f=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
     while kill -0 $pid 2>/dev/null; do for x in "${f[@]}"; do printf "\r  ${CYAN}${x}${NC}  ${WHITE}%s${NC}   " "$msg"; sleep 0.08; kill -0 $pid 2>/dev/null || break; done; done
-    printf "\r  ${GREEN}✓${NC}  ${WHITE}%s${NC}        \n" "$msg"; }
+    wait "$pid"; local rc=$?
+    if [ "$rc" -eq 0 ]; then
+      printf "\r  ${GREEN}✓${NC}  ${WHITE}%s${NC}        \n" "$msg"
+    else
+      printf "\r  ${RED}✗${NC}  ${WHITE}%s${NC}        \n" "$msg"
+    fi
+    return "$rc"; }
 
 clear
 echo ""
@@ -252,10 +258,52 @@ XRAYEOF
   echo '{"protocol":"vmess","accounts":[]}' > /etc/xray/accounts/vmess.json
   echo '{"protocol":"vless","accounts":[]}' > /etc/xray/accounts/vless.json
   echo '{"protocol":"trojan","accounts":[]}' > /etc/xray/accounts/trojan.json
+
+  # Validate the Xray configuration before creating/starting the service.
   xray run -test -config /etc/xray/config.json
-  systemctl restart xray
+
+  # Always create our own systemd unit so the installer does not depend on
+  # the upstream installer having created xray.service.
+  XRAY_BIN="$(command -v xray)"
+  if [ -z "$XRAY_BIN" ] || [ ! -x "$XRAY_BIN" ]; then
+    echo "Xray binary not found" >&2
+    exit 1
+  fi
+  cat > /etc/systemd/system/xray.service << XRAYSVC
+[Unit]
+Description=Xray Service
+Documentation=https://github.com/XTLS/Xray-core
+After=network.target nss-lookup.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=${XRAY_BIN} run -config /etc/xray/config.json
+Restart=on-failure
+RestartSec=3
+LimitNOFILE=1048576
+
+[Install]
+WantedBy=multi-user.target
+XRAYSVC
+
+  systemctl daemon-reload
+  systemctl unmask xray.service 2>/dev/null || true
+  systemctl enable xray.service
+  systemctl restart xray.service
   sleep 2
-  systemctl is-active --quiet xray
+
+  # Do not continue to bot setup unless Xray is really running.
+  if ! systemctl is-active --quiet xray.service; then
+    echo "" >&2
+    echo "❌ Xray gagal berjalan sebagai systemd service." >&2
+    systemctl --no-pager --full status xray.service >&2 || true
+    echo "--- journalctl xray.service ---" >&2
+    journalctl -u xray.service -n 40 --no-pager >&2 || true
+    exit 1
+  fi
+  systemctl is-enabled --quiet xray.service
 ) & spin $! "Install Xray"
 
 # Restore SSH/WS/SSL services after certificate setup
