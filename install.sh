@@ -1,6 +1,6 @@
 #!/bin/bash
 export DEBIAN_FRONTEND=noninteractive
-CYAN='\033[1;36m'; GREEN='\033[1;32m'; RED='\033[1;31m'
+CYAN='\033[1;36m'; GREEN='\033[1;34m'; RED='\033[1;31m'
 YELLOW='\033[1;33m'; MAGENTA='\033[1;35m'; WHITE='\033[1;37m'; BLUE='\033[1;34m'; NC='\033[0m'
 
 spin(){
@@ -15,7 +15,7 @@ spin(){
   done
   wait "$pid"; local rc=$?
   if [ "$rc" -eq 0 ]; then
-    printf "\r  ${GREEN}●${NC} ${WHITE}%-34s${NC} ${GREEN}DONE${NC}\n" "$msg"
+    printf "\r  ${BLUE}●${NC} ${WHITE}%-34s${NC} ${BLUE}DONE${NC}\n" "$msg"
   else
     printf "\r  ${RED}●${NC} ${WHITE}%-34s${NC} ${RED}FAILED${NC}\n" "$msg"
   fi
@@ -23,10 +23,10 @@ spin(){
 }
 
 clear
-printf "\n${MAGENTA}╭━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╮${NC}\n"
-printf "${MAGENTA}┃${NC}   ${CYAN}✦${NC} ${WHITE}SANSXML${NC} ${MAGENTA}VPN STORE${NC}  ${CYAN}◆${NC}  ${WHITE}VPS INSTALLER${NC}                 ${MAGENTA}┃${NC}\n"
-printf "${MAGENTA}┃${NC}   ${BLUE}Premium VPN Server • Automated Installation${NC}              ${MAGENTA}┃${NC}\n"
-printf "${MAGENTA}╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯${NC}\n"
+printf "\n${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
+printf "        ${WHITE}SANSXML VPN STORE${NC}  ${BLUE}◆${NC}  ${WHITE}VPS INSTALLER${NC}\n"
+printf "        ${CYAN}Premium VPN Server • Automated Installation${NC}\n"
+printf "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
 printf "  ${CYAN}◆${NC} ${WHITE}Starting installation...${NC} ${BLUE}Please wait${NC}\n\n"
 
 # 1. DEPENDENCIES
@@ -39,9 +39,8 @@ _pkg_install(){
 }
 _pkg_install & _pkg_pid=$!
 spin $_pkg_pid "Install packages" || {
-  echo -e "  ${RED}┌─ PACKAGE ERROR ─────────────────────────────────────────┐${NC}"
-  tail -n 12 /tmp/sansxml-apt-install.log 2>/dev/null | sed 's/^/  │ /'
-  echo -e "  ${RED}└─────────────────────────────────────────────────────────┘${NC}"
+  echo -e "  ${RED}PACKAGE ERROR${NC}"
+  tail -n 12 /tmp/sansxml-apt-install.log 2>/dev/null | sed 's/^/  /'
   exit 1
 }
 ( pip3 install --break-system-packages --upgrade "python-telegram-bot>=21.5" requests qrcode pillow >/dev/null 2>&1 \
@@ -402,9 +401,8 @@ CFGEOF
 
 # 7. BOT.PY
 echo ""
-echo -e "\n  ${MAGENTA}╭─ BOT ENGINE ${CYAN}◆${MAGENTA}──────────────────────────────────────────────╮${NC}"
-echo -e "  ${MAGENTA}│${NC} ${CYAN}▸${NC} ${WHITE}Install Bot.py${NC}                                      ${MAGENTA}│${NC}"
-echo -e "  ${MAGENTA}╰──────────────────────────────────────────────────────────────╯${NC}"
+echo -e "\n  ${BLUE}BOT ENGINE${NC} ${CYAN}◆${NC}"
+echo -e "  ${CYAN}▸${NC} ${WHITE}Install Bot.py${NC}"
 
 cat > /root/bot.py << 'BOTPYEOF'
 #!/usr/bin/env python3
@@ -2331,14 +2329,13 @@ fi
 
 # 9. MENU VPS
 echo ""
-echo -e "\n  ${MAGENTA}╭─ CONTROL PANEL ${CYAN}◆${MAGENTA}────────────────────────────────────────╮${NC}"
-echo -e "  ${MAGENTA}│${NC} ${CYAN}▸${NC} ${WHITE}Install VPS Dashboard${NC}                              ${MAGENTA}│${NC}"
-echo -e "  ${MAGENTA}╰──────────────────────────────────────────────────────────────╯${NC}"
+echo -e "\n  ${BLUE}CONTROL PANEL${NC} ${CYAN}◆${NC}"
+echo -e "  ${CYAN}▸${NC} ${WHITE}Install VPS Dashboard${NC}"
 
 cat > /usr/local/bin/sansxml-menu << 'MENUEOF'
 #!/bin/bash
-PU='\033[1;35m'; PU2='\033[1;95m'; CY='\033[1;36m'
-PK='\033[1;35m'; WH='\033[1;37m'; GR='\033[1;32m'
+PU='\033[1;34m'; PU2='\033[1;36m'; CY='\033[1;36m'
+PK='\033[1;34m'; WH='\033[1;37m'; GR='\033[1;34m'
 RE='\033[1;31m'; YE='\033[1;33m'; GY='\033[1;36m'; N='\033[0m'
 W=62
 get_ip(){ hostname -I 2>/dev/null | awk '{print $1}'; }
