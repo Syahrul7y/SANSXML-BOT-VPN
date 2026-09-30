@@ -270,7 +270,7 @@ systemctl restart ssh 2>/dev/null || systemctl restart sshd
 echo ""
 echo -e "  ${YELLOW}▸ Konfigurasi Bot${NC}"
 echo ""
-read -r -p "$(echo -e ${GREEN}'  Bot Token Telegram : '${NC})" BOT_TOKEN < /dev/tty
+BOT_TOKEN=""
 if [ -z "$BOT_TOKEN" ]; then echo -e "  ${RED}❌ Token tidak boleh kosong${NC}"; exit 1; fi
 
 GH_USER="Syahrul7y"; GH_REPO="Backup"
