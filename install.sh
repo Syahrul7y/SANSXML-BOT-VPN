@@ -986,62 +986,57 @@ def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="sg_
         except: di = 30
         cr = datetime.now() - timedelta(days=di)
         created_fmt = f"{cr.day} {BULAN[cr.month-1]}, {cr.year}"
-    except:
-        exp_fmt = exp; created_fmt = "-"
+    except: exp_fmt = exp; created_fmt = "-"
     ssh_ovpn_val = srv.get("ssh_ovpn") or srv.get("name","SG NEWMEDIA")
     host = srv.get("domain") or SSH_HOST
     quota = srv.get("quota_gb", 700) or 700
     payload_ws = "GET /cdn-cgi/trace HTTP/1.1[crlf]Host: [host][crlf][crlf]GET-RAY / HTTP/1.1[crlf]Host: [host][crlf]Connection: Upgrade[crlf]User-Agent: [ua][crlf]Upgrade: websocket[crlf][crlf]"
     payload_tls = "GET / HTTP/1.1[crlf]Host: [host][crlf]User-Agent: [ua][crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf][crlf]"
-    ws_link = f"{host}:80@{u}:{p}"
-    tls_link = f"{host}:443@{u}:{p}"
-    udp_link = f"{host}:1-65535@{u}:{p}"
+    esc = lambda x: str(x).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
     L = [
-        "┌────────────────────────",
-        f"│   <b>♨️ SSH OVPN ACCOUNT ♨️</b>",
-        f"│      ❖ <b>{head}</b> ❖",
-        "└────────────────────────", "",
-        "┌────────────────────────",
-        f"│ <b>City</b>       : {srv.get('city','Singapore')}",
-        f"│ <b>ISP</b>        : {srv.get('isp','DigitalOcean LLC')}",
-        f"│ <b>SSH OVPN</b>   : {ssh_ovpn_val}",
-        f"│ <b>Username</b>   : {u}",
-        f"│ <b>Password</b>   : {p}",
+        f"┌────────────────────────",
+        f"│   <b>♨️ SSH OVPN ACCOUNT {head} ♨️</b>",
+        f"└────────────────────────", "",
+        f"┌────────────────────────",
+        f"│ <b>City</b>       : {esc(srv.get('city','Singapore'))}",
+        f"│ <b>ISP</b>        : {esc(srv.get('isp','DigitalOcean LLC'))}",
+        f"│ <b>SSH OVPN</b>   : {esc(ssh_ovpn_val)}",
+        f"│ <b>Username</b>   : {esc(u)}",
+        f"│ <b>Password</b>   : {esc(p)}",
         f"│ <b>Qouta</b>      : {quota} GB",
         f"│ <b>Limit IP</b>   : {ip} IP",
-        "└────────────────────────", "",
-        "┌────────────────────────",
-        f"│ <b>Host</b>       : {host}",
-        "│ <b>OpenSSH</b>    : 443, 80, 22",
-        "│ <b>Dropbear</b>   : 443, 109",
-        "│ <b>SSH WS</b>     : 80, 8080, 8081-9999",
-        "│ <b>SSH SSL</b>    : 443",
-        "│ <b>SSH UDP</b>    : 1-65535",
-        "│ <b>OVPN</b>       : 443, 1194, 2200",
-        "│ <b>BadVPN</b>     : 7100, 7300",
-        "└────────────────────────",
+        f"└────────────────────────", "",
+        f"┌────────────────────────",
+        f"│ <b>Host</b>       : {esc(host)}",
+        f"│ <b>OpenSSH</b>    : 443, 80, 22",
+        f"│ <b>Dropbear</b>   : 443, 109",
+        f"│ <b>SSH WS</b>     : 80, 8080, 8081-9999",
+        f"│ <b>SSH SSL</b>    : 443",
+        f"│ <b>SSH UDP</b>    : 1-65535",
+        f"│ <b>OVPN</b>       : 443, 1194, 2200",
+        f"│ <b>BadVPN</b>     : 7100, 7300",
+        f"└────────────────────────", "",
         "──────────────────────────",
-        f"🔐 <b>SSH WS</b>  : {ws_link}",
-        f"🔐 <b>SSH TLS</b> : {tls_link}",
-        f"🔐 <b>SSH UDP</b> : {udp_link}", "",
-        f"🧩 <b>PAYLOAD WS</b> : {payload_ws}", "",
-        f"🧩 <b>PAYLOAD TLS</b> : {payload_tls}", "",
-        "┌────────────────────────",
-        f"│ <b>Durasi</b>       : {dl}",
-        f"│ <b>Dibuat</b>       : {created_fmt}",
-        f"│ <b>Berakhir</b>     : {exp_fmt}",
-        "└────────────────────────", "",
-        "<b>◤ SANSXML VPN STORE ◢</b>", "",
-        "❖ <b>TERIMAKASIH TELAH MENGGUNAKAN",
-        "LAYANAN KAMI</b> ❖"
+        f"🔐 <b>SSH WS</b>  : {esc(host)}:80@{esc(u)}:{esc(p)}",
+        f"🔐 <b>SSH TLS</b> : {esc(host)}:443@{esc(u)}:{esc(p)}",
+        f"🔐 <b>SSH UDP</b> : {esc(host)}:1-65535@{esc(u)}:{esc(p)}", "",
+        f"🧩 <b>PAYLOAD WS</b> : {esc(payload_ws)}", "",
+        f"🧩 <b>PAYLOAD TLS</b> : {esc(payload_tls)}", "",
+        f"┌────────────────────────",
+        f"│ <b>Durasi</b>    : {esc(dl)}",
+        f"│ <b>Dibuat</b>    : {created_fmt}",
+        f"│ <b>Berakhir</b>  : {exp_fmt}",
+        f"└────────────────────────", "",
+        f"🛍️ <b>SANSXML VPN STORE</b>", "",
+        f"✨ <b>TERIMAKASIH TELAH MENGGUNAKAN",
+        f"LAYANAN KAMI</b> ✨"
     ]
     return "\n".join(L)
 
 def xray_caption(proto, un, pw, cred, exp, days, sk, is_trial=False):
     s = SERVERS.get(sk,{})
     host = s.get("domain") or SSH_HOST
-    city = s.get("city","Singapore")
-    isp = s.get("isp","DigitalOcean LLC")
+    city = s.get("city","Singapore"); isp = s.get("isp","DigitalOcean LLC")
     ssh_ovpn = s.get("ssh_ovpn") or s.get("name","SG NEWMEDIA")
     quota = s.get("quota_gb",700) or 700
     ip_limit = s.get("ip_limit",1) or 1
@@ -1050,87 +1045,41 @@ def xray_caption(proto, un, pw, cred, exp, days, sk, is_trial=False):
         ed = datetime.strptime(exp,"%Y-%m-%d")
         ef = f"{ed.day} {BULAN[ed.month-1]}, {ed.year}"
         cr = datetime.now(); cf = f"{cr.day} {BULAN[cr.month-1]}, {cr.year}"
-    except:
-        ef = exp; cf = "-"
+    except: ef = exp; cf = "-"
     head = {"vmess":"VMESS","vless":"VLESS","trojan":"TROJAN"}.get(proto,proto.upper())
     lbl = "TRIAL" if is_trial else "PREMIUM"
+    esc = lambda x: str(x).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
     if proto == "vmess":
         url1 = xray_build_vmess(host,443,cred,'/vmess',True,f'{ssh_ovpn}-WSTLS')
         url2 = xray_build_vmess(host,XRAY_PORTS['vmess_ws'],cred,'/vmess',False,f'{ssh_ovpn}-WS')
         url3 = xray_build_vmess_grpc(host,cred,'vmess-grpc',f'{ssh_ovpn}-gRPC')
         t1 = "VMESS WS TLS"; t2 = "VMESS WS"; t3 = "VMESS gRPC TLS"
+        server_lines = [f"│ <b>Host</b>       : {esc(host)}", "│ <b>Path</b>       : /vmess", "│ <b>Path gRPC</b>  : vmess-grpc", "│ <b>WS TLS</b>     : 443", f"│ <b>WS</b>         : {XRAY_PORTS['vmess_ws']}", "│ <b>gRPC TLS</b>   : 443", f"│ <b>gRPC</b>       : {XRAY_PORTS['vmess_grpc']}"]
     elif proto == "vless":
         url1 = xray_build_vless(host,443,cred,'/vless',True,f'{ssh_ovpn}-WSTLS')
         url2 = xray_build_vless(host,XRAY_PORTS['vless_ws'],cred,'/vless',False,f'{ssh_ovpn}-WS')
         url3 = xray_build_vless_grpc(host,cred,'vless-grpc',f'{ssh_ovpn}-gRPC')
         t1 = "VLESS WS TLS"; t2 = "VLESS WS"; t3 = "VLESS gRPC TLS"
+        server_lines = [f"│ <b>Host</b>       : {esc(host)}", "│ <b>Path</b>       : /vless", "│ <b>Path gRPC</b>  : vless-grpc", "│ <b>WS TLS</b>     : 443", f"│ <b>WS</b>         : {XRAY_PORTS['vless_ws']}", "│ <b>gRPC TLS</b>   : 443", "│ <b>TCP TLS</b>    : 443"]
     else:
         url1 = xray_build_trojan(host,XRAY_PORTS['trojan_tcp'],cred,'',True,f'{ssh_ovpn}-TCP')
         url2 = xray_build_trojan(host,443,cred,'/trojan',True,f'{ssh_ovpn}-WS')
         url3 = xray_build_trojan_grpc(host,cred,'trojan-grpc',f'{ssh_ovpn}-gRPC')
         t1 = "TROJAN TCP"; t2 = "TROJAN WS TLS"; t3 = "TROJAN gRPC TLS"
-    if proto == "trojan":
-        account_lines = [f"│ <b>Password</b>   : {cred}"]
-    else:
-        account_lines = [f"│ <b>Password</b>   : {pw}",f"│ <b>UUID</b>       : {cred}"]
-    if proto == "vmess":
-        server_lines = [
-            f"│ <b>Host</b>       : {host}",
-            "│ <b>Path</b>       : /vmess",
-            "│ <b>Path gRPC</b>  : vmess-grpc",
-            "│ <b>WS TLS</b>     : 443",
-            f"│ <b>WS</b>         : {XRAY_PORTS['vmess_ws']}",
-            "│ <b>gRPC TLS</b>   : 443",
-            f"│ <b>gRPC</b>       : {XRAY_PORTS['vmess_grpc']}"
-        ]
-    elif proto == "vless":
-        server_lines = [
-            f"│ <b>Host</b>       : {host}",
-            "│ <b>Path</b>       : /vless",
-            "│ <b>Path gRPC</b>  : vless-grpc",
-            "│ <b>WS TLS</b>     : 443",
-            f"│ <b>WS</b>         : {XRAY_PORTS['vless_ws']}",
-            "│ <b>gRPC TLS</b>   : 443",
-            "│ <b>TCP TLS</b>    : 443"
-        ]
-    else:
-        server_lines = [
-            f"│ <b>Host</b>       : {host}",
-            f"│ <b>Trojan TCP</b> : {XRAY_PORTS['trojan_tcp']}",
-            "│ <b>Trojan WS</b>  : 443 /trojan",
-            "│ <b>Trojan gRPC</b>: 443 trojan-grpc"
-        ]
-    durasi = f"{TRIAL_DURATION_MIN} Minute" if is_trial else f"{days} Hari"
-    L = [
-        "┌────────────────────────",
-        f"│   <b>♨️ {head} ACCOUNT ♨️</b>",
-        f"│      ❖ <b>{lbl}</b> ❖",
-        "└────────────────────────", "",
-        "┌────────────────────────",
-        f"│ <b>City</b>       : {city}",
-        f"│ <b>ISP</b>        : {isp}",
-        f"│ <b>SSH OVPN</b>   : {ssh_ovpn}",
-        f"│ <b>Username</b>   : {un}",
-        *account_lines,
-        f"│ <b>Qouta</b>      : {quota} GB",
-        f"│ <b>Limit IP</b>   : {ip_limit} IP",
-        "└────────────────────────", "",
-        "┌────────────────────────",
-        *server_lines,
-        "└────────────────────────",
-        "──────────────────────────",
-        f"🔐 <b>{t1}</b> : {url1}",
-        f"🔐 <b>{t2}</b> : {url2}",
-        f"🔐 <b>{t3}</b> : {url3}", "",
-        "┌────────────────────────",
-        f"│ <b>Durasi</b>       : {durasi}",
-        f"│ <b>Dibuat</b>       : {cf}",
-        f"│ <b>Berakhir</b>     : {ef}",
-        "└────────────────────────", "",
-        "<b>◤ SANSXML VPN STORE ◢</b>", "",
-        "❖ <b>TERIMAKASIH TELAH MENGGUNAKAN",
-        "LAYANAN KAMI</b> ❖"
+        server_lines = [f"│ <b>Host</b>       : {esc(host)}", f"│ <b>Trojan TCP</b> : {XRAY_PORTS['trojan_tcp']}", "│ <b>Trojan WS</b>  : 443 /trojan", "│ <b>Trojan gRPC</b>: 443 trojan-grpc"]
+    password_line = f"│ <b>Password</b>   : {esc(cred if proto == 'trojan' else pw)}"
+    account_lines = [
+        f"│ <b>City</b>       : {esc(city)}", f"│ <b>ISP</b>        : {esc(isp)}", f"│ <b>SSH OVPN</b>   : {esc(ssh_ovpn)}",
+        f"│ <b>Username</b>   : {esc(un)}", password_line
     ]
+    if proto != "trojan": account_lines.append(f"│ <b>UUID</b>       : {esc(cred)}")
+    account_lines += [f"│ <b>Qouta</b>      : {quota} GB", f"│ <b>Limit IP</b>   : {ip_limit} IP"]
+    dur = f"{TRIAL_DURATION_MIN} Minute" if is_trial else f"{days} Hari"
+    L = [f"┌────────────────────────", f"│   <b>♨️ {head} ACCOUNT {lbl} ♨️</b>", f"└────────────────────────", "",
+         "┌────────────────────────"] + account_lines + ["└────────────────────────", "", "┌────────────────────────"] + server_lines + ["└────────────────────────", "", "──────────────────────────",
+         f"🔐 <b>{esc(t1)}</b> : {esc(url1)}", f"🔐 <b>{esc(t2)}</b> : {esc(url2)}", f"🔐 <b>{esc(t3)}</b> : {esc(url3)}", "",
+         "┌────────────────────────", f"│ <b>Durasi</b>    : {esc(dur)}", f"│ <b>Dibuat</b>    : {cf}", f"│ <b>Berakhir</b>  : {ef}", "└────────────────────────", "",
+         "🛍️ <b>SANSXML VPN STORE</b>", "", "✨ <b>TERIMAKASIH TELAH MENGGUNAKAN", "LAYANAN KAMI</b> ✨"]
     return "\n".join(L)
 
 # ACTIONS
