@@ -369,6 +369,8 @@ systemctl restart ssh 2>/dev/null || systemctl restart sshd
 # Token Telegram sengaja dikosongkan saat instalasi.
 # Token hanya diisi melalui menu [05] ADD TOKEN BOT.
 BOT_TOKEN=""
+# Isi dengan API key HTTP Custom resmi (hca_live_...) agar generator .hc dapat digunakan.
+HTTP_CUSTOM_API_KEY=""
 
 GH_USER="Syahrul7y"; GH_REPO="Backup"
 GH_EMAIL="hodamkecil@gmail.com"
@@ -395,7 +397,8 @@ cat > /root/vpnbot_config.json << CFGEOF
     "sg_2ip": {"name": "🇸🇬 PRIME SG-02", "city": "Singapore", "isp": "DigitalOcean LLC", "ssh_ovpn": "DIGITALOCEAN • PRIME SG-02", "domain": "${DOMAIN}", "price_day": 167, "price_month": 5010, "ip_limit": 2, "slot_max": 50, "quota_gb": 800}
   },
   "ip_limit": 2,
-  "block_hours": 2
+  "block_hours": 2,
+  "http_custom_api_key": "${HTTP_CUSTOM_API_KEY}"
 }
 CFGEOF
 
@@ -413,7 +416,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 
 CONFIG_FILE = "/root/vpnbot_config.json"
 def load_config():
-    d = {"bot_token":"","domain":"","owner_ids":[6144358600],"servers":{},"ip_limit":2,"block_hours":2}
+    d = {"bot_token":"","domain":"","owner_ids":[6144358600],"servers":{},"ip_limit":2,"block_hours":2,"http_custom_api_key":""}
     if os.path.exists(CONFIG_FILE):
         try:
             with open(CONFIG_FILE) as f: c = json.load(f)
@@ -442,6 +445,11 @@ ACCOUNTS_FILE="/root/vpnbot_accounts.json"; TRIAL_FILE="/root/vpnbot_trial.json"
 TRX_FILE="/root/vpnbot_trx.json"
 XRAY_CONFIG = "/etc/xray/config.json"
 XRAY_PORTS = {"vmess_ws":10001,"vmess_tls":8443,"vmess_grpc":10002,"vless_ws":10003,"vless_tls":8444,"vless_grpc":10004,"trojan_tcp":10005,"trojan_ws":8445,"trojan_grpc":10007}
+
+# HTTP CUSTOM GENERATOR
+HC_API_URL = "https://api.eprodev.org/v1/configs/hc"
+HC_API_KEY = CONFIG.get("http_custom_api_key", "").strip()
+HC_SNI = "ssl-listen.noice.id"
 
 logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO,
     handlers=[logging.StreamHandler(), logging.FileHandler("/root/vpnbot.log", encoding="utf-8")])
@@ -952,9 +960,115 @@ def reset_backup(keep=True):
         return True,r
     except Exception as e: return False,{"error":str(e)[:200]}
 
+# HTTP CUSTOM GENERATOR
+def hc_build_config(file_name, host, port, username, password):
+    """Generate a real HTTP Custom .hc file through the official generator API."""
+    if not HC_API_KEY:
+        return None, "HTTP Custom API key belum diatur di vpnbot_config.json"
+    payload = {
+        "file_name": file_name,
+        "powered_by": "SANSXML VPN STORE",
+        "main_connections": {
+            "ssh": {
+                "payload": {
+                    "enabled_methods": ["payload", "tls"],
+                    "custom_payload": "CONNECT [host_port] HTTP/1.1[crlf]Host: ssl-listen.noice.id[crlf][crlf]",
+                    "tls": {
+                        "sni": HC_SNI,
+                        "version": "tls_1_3",
+                        "allow_insecure": False
+                    }
+                },
+                "account": {
+                    "server_host": host,
+                    "server_port": int(port),
+                    "username": username,
+                    "password": password
+                },
+                "settings": {
+                    "keepalive_seconds": 10,
+                    "tcp_no_delay": True,
+                    "compression": False
+                }
+            }
+        },
+        "profiles": [],
+        "protection": {
+            "content_access": "lock_all",
+            "note": "SANSXML VPN STORE - AXIS WA V1",
+            "ssh_banner_as_note": True
+        },
+        "password": ""
+    }
+    try:
+        r = requests.post(
+            HC_API_URL,
+            headers={"Authorization": f"Bearer {HC_API_KEY}", "Content-Type": "application/json"},
+            json=payload,
+            timeout=60
+        )
+        if r.status_code != 201:
+            try:
+                err = r.json().get("error", {})
+                msg = err.get("message") or err.get("code") or r.text[:300]
+            except Exception:
+                msg = r.text[:300]
+            return None, f"HTTP Custom API {r.status_code}: {msg}"
+        data = r.json()
+        raw = base64.b64decode(data.get("content_base64", ""))
+        if not raw:
+            return None, "API tidak mengembalikan file .hc"
+        return raw, None
+    except Exception as e:
+        return None, f"Gagal menghubungi generator: {str(e)[:250]}"
+
+def parse_hc_ssh_account(t):
+    # Format: host:port@user:pass
+    m = re.match(r"^([^:@\s]+):(\d+)@([^:\s]+):(.+)$", t)
+    if not m:
+        return None
+    host, port, username, password = m.groups()
+    try:
+        port = int(port)
+        if not 1 <= port <= 65535:
+            return None
+    except Exception:
+        return None
+    if not username or not password:
+        return None
+    return host, port, username, password
+
+def kb_buat_config():
+    return InlineKeyboardMarkup([
+        [B("➕ HTTP CUSTOM", "hc_http_custom", style="primary")],
+        [B("🔙 KEMBALI", "menu|main", style="danger")]
+    ])
+
+def kb_hc_protocol():
+    return InlineKeyboardMarkup([
+        [B("➕ SSH OVPN", "hc_ssh", style="primary")],
+        [B("🔙 Kembali", "buat_config", style="danger")]
+    ])
+
+def kb_hc_ssh():
+    return InlineKeyboardMarkup([
+        [B("AXIS WA V1", "hc_axis_v1", style="primary")],
+        [B("🔙 kembali", "hc_http_custom", style="danger")]
+    ])
+
+def hc_buat_config_text():
+    return "<blockquote>🧩 <b>BUAT CONFIG</b>\n\n📁 <b>MENU BUAT CONFIG</b>\n──────────────────────\nPilih untuk config aplikasi VPN:</blockquote>"
+
+def hc_generator_text():
+    return "<blockquote>🌐 <b>HTTP Custom Generator</b>\n━━━━━━━━━━━━━━━━━━━━\nPilih protokol yang ingin digunakan:</blockquote>"
+
+def hc_ssh_text():
+    return "<blockquote>🌐 <b>SSH OVPN</b>\n━━━━━━━━━━━━━━━━━━━━\nPilih config yang ingin digunakan:</blockquote>"
+
 # KEYBOARDS
 def kb_dash(uid):
     rows = [[B("➕  BUAT AKUN","buat_akun",style="primary"),B("⌛  TRIAL AKUN","trial_akun",style="primary")],
+        [B("🧩 BUAT CONFIG","buat_config",style="primary")],
         [B("🔄 PERPANJANG AKUN","perpanjang_akun",style="primary")],
         [B("🏦 SALDO","isi_saldo",style="primary"),B("📁 AKUN SAYA","my_accs",style="primary")],
         [B("♻️ REFRESH","refresh",style="primary")]]
@@ -1420,6 +1534,29 @@ async def cb(u,c):
         except: pass
         asyncio.create_task(sync_push_async()); return
 
+    if d == "buat_config":
+        c.user_data.clear()
+        try: await q.edit_message_text(hc_buat_config_text(), reply_markup=kb_buat_config(), parse_mode="HTML")
+        except: pass
+        return
+    if d == "hc_http_custom":
+        try: await q.edit_message_text(hc_generator_text(), reply_markup=kb_hc_protocol(), parse_mode="HTML")
+        except: pass
+        return
+    if d == "hc_ssh":
+        try: await q.edit_message_text(hc_ssh_text(), reply_markup=kb_hc_ssh(), parse_mode="HTML")
+        except: pass
+        return
+    if d.startswith("hc_unavailable|"):
+        await q.answer("⚠️ Protokol ini belum tersedia.", show_alert=True)
+        return
+    if d == "hc_axis_v1":
+        c.user_data["hc_step"] = "filename"
+        c.user_data["hc_data"] = {}
+        try: await q.edit_message_reply_markup(reply_markup=kb_hc_ssh())
+        except: pass
+        await chat.send_message("🌐 <b>KETIK NAMA FILE CONFIG</b>\n━━━━━━━━━━━━━━━━━━━━━━\nContoh: <code>axis wa</code>, dll.\n\nKetik /batal untuk membatalkan", parse_mode="HTML")
+        return
     if d == "buat_akun":
         if not is_backup_ready():
             await q.answer("⚠️ Backup belum di-setup.",show_alert=True); return
@@ -2164,6 +2301,49 @@ async def msg(u,c):
         await u.message.reply_text(f"<blockquote>📢 <b>PREVIEW BROADCAST</b>\n\n{t}\n\nKirim pesan ini ke semua user?</blockquote>",
             reply_markup=InlineKeyboardMarkup([[B("✅ Kirim","bc_send",style="success")],
                 [B("❌ Batal","admin|menu",style="danger")]]),parse_mode="HTML")
+        return
+
+    if t.lower() == "/batal" and c.user_data.get("hc_step"):
+        c.user_data.pop("hc_step", None); c.user_data.pop("hc_data", None)
+        await u.message.reply_text("❌ Pembuatan config dibatalkan.", reply_markup=InlineKeyboardMarkup([[B("🔙 Kembali", "buat_config", style="danger")]]), parse_mode="HTML")
+        return
+
+    hc_step = c.user_data.get("hc_step")
+    if hc_step == "filename":
+        name = re.sub(r"[^a-zA-Z0-9 _-]", "", t).strip()
+        if not name:
+            await u.message.reply_text("❌ Nama file tidak valid.\n\nContoh: <code>axis wa</code>", parse_mode="HTML")
+            return
+        c.user_data["hc_data"] = {"file_name": name}
+        c.user_data["hc_step"] = "account"
+        await u.message.reply_text("🔐 <b>Kirimkan detail akun SSH OVPN</b>\n━━━━━━━━━━━━━━━━━━━━━━━━━\nFormat: <code>host:port@user:pass</code>\n\nContoh: <code>id.example.com:443@username:password</code>", parse_mode="HTML")
+        return
+
+    if hc_step == "account":
+        parsed = parse_hc_ssh_account(t)
+        if not parsed:
+            await u.message.reply_text("❌ <b>Format akun salah</b>\n\nGunakan:\n<code>host:port@user:pass</code>\n\nContoh:\n<code>id.example.com:443@username:password</code>", parse_mode="HTML")
+            return
+        host, port, username, password = parsed
+        name = c.user_data.get("hc_data", {}).get("file_name", "axis")
+        c.user_data["hc_step"] = None
+        c.user_data["hc_data"] = {}
+        m = await u.message.reply_text("⚙️ <b>Membuat config HTTP Custom......</b>", parse_mode="HTML")
+        raw, err = await asyncio.to_thread(hc_build_config, name, host, port, username, password)
+        if err:
+            await m.edit_text(f"❌ <b>Gagal membuat config</b>\n\n<code>{err}</code>", parse_mode="HTML")
+            return
+        filename = re.sub(r"[^a-zA-Z0-9._-]+", "_", name).strip("._") or "axis"
+        if not filename.lower().endswith(".hc"):
+            filename += ".hc"
+        caption = ("<blockquote>✅ <b>Config berhasil dibuat</b>\n"
+                   "──────────────────\n"
+                   f"📁 Nama: <b>{filename.rsplit('.',1)[0]}</b>\n"
+                   "🌐 Protocol: <b>SSH OVPN</b>\n"
+                   "🧩 Import file config ke aplikasi HTTP Custom\n\n"
+                   "🛍️ <b>SANSXML VPN STORE</b>\n\n"
+                   "✨ Terimakasih telah menggunakan layanan kami ✨</blockquote>")
+        await u.message.reply_document(document=io.BytesIO(raw), filename=filename, caption=caption, parse_mode="HTML")
         return
 
     step = c.user_data.get("buat_step")
