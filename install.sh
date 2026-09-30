@@ -3,50 +3,35 @@ export DEBIAN_FRONTEND=noninteractive
 CYAN='\033[1;36m'; GREEN='\033[1;32m'; RED='\033[1;31m'
 YELLOW='\033[1;33m'; MAGENTA='\033[1;35m'; WHITE='\033[1;37m'; NC='\033[0m'
 
-spin(){ local pid=$1 msg="$2"; local f=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
-    while kill -0 $pid 2>/dev/null; do for x in "${f[@]}"; do printf "\r  ${CYAN}${x}${NC}  ${WHITE}%s${NC}   " "$msg"; sleep 0.08; kill -0 $pid 2>/dev/null || break; done; done
-    wait "$pid"; local rc=$?
-    if [ "$rc" -eq 0 ]; then
-      printf "\r  ${GREEN}✓${NC}  ${WHITE}%s${NC}        \n" "$msg"
-    else
-      printf "\r  ${RED}✗${NC}  ${WHITE}%s${NC}        \n" "$msg"
-    fi
-    return "$rc"; }
+spin(){
+  local pid=$1 msg="$2"
+  local f=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
+  while kill -0 "$pid" 2>/dev/null; do
+    for x in "${f[@]}"; do
+      printf "\r  ${CYAN}${x}${NC} ${WHITE}%s${NC}   " "$msg"
+      sleep 0.08
+      kill -0 "$pid" 2>/dev/null || break
+    done
+  done
+  wait "$pid"; local rc=$?
+  if [ "$rc" -eq 0 ]; then
+    printf "\r  ${GREEN}✓${NC} ${WHITE}%s${NC}\n" "$msg"
+  else
+    printf "\r  ${RED}✗${NC} ${WHITE}%s${NC} ${RED}(error)${NC}\n" "$msg"
+  fi
+  return "$rc"
+}
 
 clear
 echo ""
-echo -e "  ${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "  ${CYAN}    SANSXML VPN STORE — AUTO INSTALL v10${NC}"
-echo -e "  ${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo ""
 
-# 1. INSTALLER MENU
-# Tidak melakukan "bersih-bersih VPS" otomatis. Installer hanya menyiapkan/
-# memperbarui komponen yang dibutuhkan agar data dan konfigurasi VPS tidak terhapus.
-echo -e "  ${CYAN}┌──────────────────────────────────────────────────────────┐${NC}"
-echo -e "  ${CYAN}│${NC}              ${WHITE}SANSXML VPN STORE${NC}                  ${CYAN}│${NC}"
-echo -e "  ${CYAN}│${NC}              ${YELLOW}AUTO INSTALLER v10${NC}                 ${CYAN}│${NC}"
-echo -e "  ${CYAN}├──────────────────────────────────────────────────────────┤${NC}"
-echo -e "  ${CYAN}│${NC}  ${GREEN}01${NC}  System & Dependencies                              ${CYAN}│${NC}"
-echo -e "  ${CYAN}│${NC}  ${GREEN}02${NC}  SSH / SSL / UDPGW                                  ${CYAN}│${NC}"
-echo -e "  ${CYAN}│${NC}  ${GREEN}03${NC}  Firewall & Network                                 ${CYAN}│${NC}"
-echo -e "  ${CYAN}│${NC}  ${GREEN}04${NC}  Xray Core                                          ${CYAN}│${NC}"
-echo -e "  ${CYAN}│${NC}  ${GREEN}05${NC}  Telegram VPN Bot                                   ${CYAN}│${NC}"
-echo -e "  ${CYAN}├──────────────────────────────────────────────────────────┤${NC}"
-echo -e "  ${CYAN}│${NC}  ${MAGENTA}◆${NC} SANSXML VPN STORE  •  PREMIUM VPN SYSTEM            ${CYAN}│${NC}"
-echo -e "  ${CYAN}└──────────────────────────────────────────────────────────┘${NC}"
-echo ""
+# 1. DEPENDENCIES
 
-# 2. DEPENDENCIES
-echo ""
-echo -e "  ${CYAN}╭─[ 01 • SYSTEM & DEPENDENCIES ]────────────────────────────╮${NC}"
-echo -e "  ${CYAN}│${NC} Menyiapkan package sistem, Python API, SSH key & vnstat.  ${CYAN}│${NC}"
-echo -e "  ${CYAN}╰────────────────────────────────────────────────────────────╯${NC}"
 ( apt-get update -y >/dev/null 2>&1 ) & spin $! "Update repository"
 _pkg_install(){
   dpkg --configure -a >/dev/null 2>&1 || true
   apt-get -f install -y >/dev/null 2>&1 || true
-  apt-get install -y --no-install-recommends python3 python3-pip python3-venv sshpass curl wget unzip stunnel4 net-tools cron ufw iptables openssl cmake build-essential git pkg-config bc procps dnsutils vnstat uuid-runtime socat >/tmp/sansxml-apt-install.log 2>&1
+  apt-get install -y --no-install-recommends python3 python3-pip python3-venv sshpass curl wget unzip stunnel4 dropbear haproxy nginx net-tools cron ufw iptables openssl cmake build-essential git pkg-config bc procps dnsutils vnstat uuid-runtime socat >/tmp/sansxml-apt-install.log 2>&1
 }
 _pkg_install & _pkg_pid=$!
 spin $_pkg_pid "Install packages" || {
@@ -57,6 +42,54 @@ spin $_pkg_pid "Install packages" || {
 }
 ( pip3 install --break-system-packages --upgrade "python-telegram-bot>=21.5" requests qrcode pillow >/dev/null 2>&1 \
     || pip3 install --upgrade "python-telegram-bot>=21.5" requests qrcode pillow >/dev/null 2>&1 ) & spin $! "Install Telegram API"
+( mkdir -p /etc/dropbear
+  if [ -f /etc/default/dropbear ]; then
+    sed -i 's/^NO_START=.*/NO_START=0/' /etc/default/dropbear
+    sed -i 's/^DROPBEAR_PORT=.*/DROPBEAR_PORT=109/' /etc/default/dropbear
+    grep -q '^DROPBEAR_PORT=' /etc/default/dropbear || echo 'DROPBEAR_PORT=109' >> /etc/default/dropbear
+    sed -i 's/^DROPBEAR_EXTRA_ARGS=.*/DROPBEAR_EXTRA_ARGS="-p 109"/' /etc/default/dropbear
+  fi
+  systemctl daemon-reload >/dev/null 2>&1 || true
+) & spin $! "Install Dropbear"
+
+( cat > /etc/nginx/sites-available/sansxml << 'NGINXEOF'
+server {
+    listen 127.0.0.1:8081;
+    server_name _;
+    location / {
+        return 200 "SANSXML VPN STORE";
+        add_header Content-Type text/plain;
+    }
+}
+NGINXEOF
+  rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+  ln -sf /etc/nginx/sites-available/sansxml /etc/nginx/sites-enabled/sansxml
+  nginx -t >/dev/null 2>&1
+) & spin $! "Install Nginx"
+
+( cat > /etc/haproxy/haproxy.cfg << 'HAPROXYEOF'
+global
+    log /dev/log local0
+    log /dev/log local1 notice
+    daemon
+
+defaults
+    mode tcp
+    timeout connect 5s
+    timeout client 30s
+    timeout server 30s
+
+frontend sansxml_frontend
+    bind 127.0.0.1:8082
+    default_backend sansxml_backend
+
+backend sansxml_backend
+    mode tcp
+    server nginx 127.0.0.1:8081 check
+HAPROXYEOF
+  haproxy -c -f /etc/haproxy/haproxy.cfg >/dev/null 2>&1
+) & spin $! "Install HAProxy"
+
 ( mkdir -p /root/.ssh; chmod 700 /root/.ssh
   [ ! -f /root/.ssh/id_bot ] && ssh-keygen -t ed25519 -f /root/.ssh/id_bot -N "" -q
   cat /root/.ssh/id_bot.pub >> /root/.ssh/authorized_keys
@@ -66,9 +99,6 @@ spin $_pkg_pid "Install packages" || {
 
 # 3. VPN SERVICES
 echo ""
-echo -e "  ${CYAN}╭─[ 02 • VPN SERVICES ]─────────────────────────────────────╮${NC}"
-echo -e "  ${CYAN}│${NC} WS-SSH • SSL • UDPGW • Firewall • Service manager       ${CYAN}│${NC}"
-echo -e "  ${CYAN}╰────────────────────────────────────────────────────────────╯${NC}"
 
 ( cat > /usr/local/bin/ws-ssh.py << 'WSEOF'
 #!/usr/bin/env python3
@@ -181,7 +211,7 @@ Restart=always
 [Install]
 WantedBy=multi-user.target
 EOF
-) & spin $! "Compile BadVPN UDPGW"
+) & spin $! "Install UDPGW"
 
 ( ufw default allow incoming >/dev/null 2>&1
   ufw default allow outgoing >/dev/null 2>&1
@@ -190,18 +220,15 @@ EOF
   ufw --force enable >/dev/null 2>&1 ) & spin $! "Configure firewall"
 
 ( systemctl daemon-reload
-  systemctl enable ws-ssh ws-ssh-alt stunnel4 >/dev/null 2>&1
-  systemctl restart ws-ssh ws-ssh-alt stunnel4
+  systemctl enable ws-ssh ws-ssh-alt stunnel4 dropbear nginx haproxy >/dev/null 2>&1
+  systemctl restart ws-ssh ws-ssh-alt stunnel4 dropbear nginx haproxy
   [ -f /usr/bin/badvpn-udpgw ] && systemctl enable udpgw >/dev/null 2>&1 && systemctl restart udpgw
   sleep 2 ) & spin $! "Start VPN services"
 
 DOMAIN="sgivip.naaofficial.web.id"
 
-# 4. INSTALL XRAY
+# 4. VPN CORE
 echo ""
-echo -e "  ${CYAN}╭─[ 03 • XRAY CORE ]────────────────────────────────────────╮${NC}"
-echo -e "  ${CYAN}│${NC} VMESS • VLESS • TROJAN • TLS / WS / gRPC               ${CYAN}│${NC}"
-echo -e "  ${CYAN}╰────────────────────────────────────────────────────────────╯${NC}"
 (
   set -e
   if ! command -v xray >/dev/null 2>&1; then
@@ -292,7 +319,7 @@ XRAYSVC
     exit 1
   fi
   systemctl is-enabled --quiet xray.service
-) & spin $! "Install Xray"
+) & spin $! "Install Core VPN"
 
 # Restore SSH/WS/SSL services after certificate setup
 ( systemctl daemon-reload; systemctl enable ws-ssh ws-ssh-alt stunnel4 >/dev/null 2>&1; systemctl restart ws-ssh ws-ssh-alt stunnel4 ) & spin $! "Start SSH/SSL services"
@@ -323,9 +350,7 @@ systemctl restart ssh 2>/dev/null || systemctl restart sshd
 
 # 6. BOT CONFIG
 echo ""
-echo -e "  ${CYAN}╭─[ 04 • TELEGRAM VPN BOT ]─────────────────────────────────╮${NC}"
-echo -e "  ${CYAN}│${NC} Konfigurasi bot, server, owner & backup                  ${CYAN}│${NC}"
-echo -e "  ${CYAN}╰────────────────────────────────────────────────────────────╯${NC}"
+echo -e "  ${CYAN}›${NC} ${WHITE}Telegram VPN Bot${NC}"
 echo ""
 read -r -p "$(echo -e ${GREEN}'  Bot Token Telegram : '${NC})" BOT_TOKEN < /dev/tty
 if [ -z "$BOT_TOKEN" ]; then echo -e "  ${RED}❌ Token tidak boleh kosong${NC}"; exit 1; fi
@@ -2346,54 +2371,100 @@ box_row(){ printf " %b\n" "$1"; }
 kv(){ local key=$(printf '%-9s' "$1"); printf " ${GY}%s${N} ${PK}›${N} ${WH}%s${N}\n" "$key" "$2"; }
 kvc(){ local key=$(printf '%-9s' "$1"); printf " ${GY}%s${N} ${PK}›${N} ${3}%s${N}\n" "$key" "$2"; }
 bar(){ local p=$1; local f=$((p/10)); local o=""; for ((i=1;i<=10;i++)); do [ $i -le $f ] && o="${o}█" || o="${o}░"; done; echo "$o"; }
-show_banner(){ local tgl=$(date '+%d %b %Y  %H:%M:%S'); echo ""
-    local l=""; for ((i=0;i<62;i++)); do l="${l}─"; done
-    printf "${PU}╭${l}╮${N}\n"
-    printf "          ${PK}SC ${WH}SANSXML VPN BOT STORE${N}\n"
-    printf "${PU}╰${l}╯${N}\n"
-    echo -e "           ${PU2}sansxml${N}  ${CY}◆${N}  ${PU2}VPS${N}  ${CY}◆${N}  ${WH}${tgl}${N}"; echo ""; }
+show_banner(){
+    echo ""
+    printf " ${PK}SANSXML VPN STORE${N}  ${GY}•${N}  ${WH}VPS${N}\n"
+    echo ""
+}
+status_dot(){ [ "$1" = "active" ] && printf "${GR}●${N}" || printf "${RE}●${N}"; }
+get_xray_count(){
+    local proto="$1" f="/root/vpnbot_accounts.json"
+    [ ! -f "$f" ] && { echo 0; return; }
+    python3 - "$proto" "$f" <<'PYCODE'
+import json,sys
+proto,path=sys.argv[1],sys.argv[2]
+try:
+    d=json.load(open(path))
+    print(sum(1 for a in d.values() if a.get("proto")==proto))
+except Exception:
+    print(0)
+PYCODE
+}
+get_ssh_count(){
+    local f="/root/vpnbot_accounts.json"
+    [ ! -f "$f" ] && { echo 0; return; }
+    python3 - "$f" <<'PYCODE'
+import json,sys
+try:
+    d=json.load(open(sys.argv[1])); print(sum(1 for a in d.values() if a.get("proto","ssh")=="ssh"))
+except Exception:
+    print(0)
+PYCODE
+}
+get_traffic_pair(){
+    local mode="$1"
+    command -v vnstat >/dev/null 2>&1 || { echo "0 MiB  0 MiB  0 MiB"; return; }
+    vnstat --json "$mode" 1 2>/dev/null | python3 -c '
+import sys,json
+mode=sys.argv[1]
+try:
+    d=json.load(sys.stdin); ifs=d.get("interfaces",[])
+    arr=ifs[0].get("traffic",{}).get("day" if mode=="d" else "month",[]) if ifs else []
+    x=arr[-1] if arr else {}
+    rx=float(x.get("rx",0)); tx=float(x.get("tx",0)); total=rx+tx
+    def fmt(v):
+        if v >= 1024**3: return f"{v/1024**3:.1f} GiB"
+        return f"{v/1024**2:.0f} MiB"
+    print(f"{fmt(rx)}  {fmt(tx)}  {fmt(total)}")
+except Exception:
+    print("0 MiB  0 MiB  0 MiB")
+' "$mode"
+}
+get_speed(){
+    local a rx1 tx1 rx2 tx2
+    a=$(awk 'NR>2{gsub(":","",$1);rx+=$2;tx+=$10}END{print rx,tx}' /proc/net/dev)
+    sleep 1
+    local b=$(awk 'NR>2{gsub(":","",$1);rx+=$2;tx+=$10}END{print rx,tx}' /proc/net/dev)
+    rx1=$(awk '{print $1}' <<<"$a"); tx1=$(awk '{print $2}' <<<"$a")
+    rx2=$(awk '{print $1}' <<<"$b"); tx2=$(awk '{print $2}' <<<"$b")
+    awk -v r=$((rx2-rx1)) -v t=$((tx2-tx1)) 'BEGIN{printf "%.2f Mbit/s",((r+t)*8)/1000000}'
+}
+get_cpu_pct(){
+    local a b
+    a=$(awk '''/^cpu /{print $2+$3+$4+$5+$6+$7+$8, $5}''' /proc/stat)
+    sleep 0.2
+    b=$(awk '''/^cpu /{print $2+$3+$4+$5+$6+$7+$8, $5}''' /proc/stat)
+    awk -v a="$a" -v b="$b" '''BEGIN{split(a,x);split(b,y);dt=y[1]-x[1];di=y[2]-x[2];printf "%d",dt>0?((dt-di)/dt)*100:0}'''
+}
 show_menu(){ clear
-    local ip=$(get_ip); local up=$(get_uptime)
-    local os=$(grep PRETTY_NAME /etc/os-release|cut -d= -f2|tr -d '"')
-    local krn=$(uname -r|cut -d- -f1); local core=$(nproc)
-    local load=$(cat /proc/loadavg|awk '{print $1, $2, $3}')
-    local rp=$(get_ram_pct); local rh=$(get_ram_h); local dp=$(get_disk_pct); local dh=$(get_disk_h)
-    local tgl=$(date '+%d %b %Y  %H:%M:%S')
-    local bus=$(get_bot_users); local acc=$(get_accounts); local blk=$(get_blocked); local onl=$(get_online)
-    local today=$(get_traffic_today); local month=$(get_traffic_month)
-    local bot=$(systemctl is-active vpnbot 2>/dev/null); local ws=$(systemctl is-active ws-ssh 2>/dev/null)
-    local ssl=$(systemctl is-active stunnel4 2>/dev/null); local udp=$(systemctl is-active udpgw 2>/dev/null)
-    local xry=$(systemctl is-active xray 2>/dev/null)
-    local d_bot=$([ "$bot" = "active" ] && echo "${GR}●${N}" || echo "${RE}●${N}")
-    local d_ws=$([ "$ws" = "active" ] && echo "${GR}●${N}" || echo "${RE}●${N}")
-    local d_ssl=$([ "$ssl" = "active" ] && echo "${GR}●${N}" || echo "${RE}●${N}")
-    local d_udp=$([ "$udp" = "active" ] && echo "${GR}●${N}" || echo "${RE}●${N}")
-    local d_xry=$([ "$xry" = "active" ] && echo "${GR}●${N}" || echo "${RE}●${N}")
-    local hl="${GR}GOOD${N}"; [ "$bot" != "active" ] && hl="${RE}BAD${N}"
+    local bot ws ssl udp xry ngx drp hap
+    bot=$(systemctl is-active vpnbot 2>/dev/null); ws=$(systemctl is-active ws-ssh 2>/dev/null)
+    ssl=$(systemctl is-active stunnel4 2>/dev/null); udp=$(systemctl is-active udpgw 2>/dev/null)
+    xry=$(systemctl is-active xray 2>/dev/null); ngx=$(systemctl is-active nginx 2>/dev/null)
+    drp=$(systemctl is-active dropbear 2>/dev/null); hap=$(systemctl is-active haproxy 2>/dev/null)
+    local sshc=$(get_ssh_count); local vmc=$(get_xray_count vmess); local vlc=$(get_xray_count vless); local trc=$(get_xray_count trojan)
+    local total=$((sshc+vmc+vlc+trc)); local onl=$(get_online)
+    local ram=$(get_ram_pct); local cpu=$(get_cpu_pct)
+    local today=$(get_traffic_pair d); local month=$(get_traffic_pair m); local speed=$(get_speed)
+    local mon=$(date '+%B' | tr '[:upper:]' '[:lower:]')
     show_banner
-    box_top "SERVER"
-    kv "OS" "$os"; kv "KERNEL" "$krn"
-    printf " ${GY}%-9s${N} ${PK}›${N} ${WH}%s vCPU${N}      ${GY}load${N} ${YE}%s${N}\n" "CPU" "$core" "$load"
-    printf " ${GY}%-9s${N} ${PK}›${N} ${PU2}%s${N} ${WH}%3s%%${N}  ${GY}%s${N}\n" "RAM" "$(bar $rp)" "$rp" "$rh"
-    printf " ${GY}%-9s${N} ${PK}›${N} ${PU2}%s${N} ${WH}%3s%%${N}  ${GY}%s${N}\n" "DISK" "$(bar $dp)" "$dp" "$dh"
-    kv "UPTIME" "$up"; kv "TIME" "$tgl"
-    box_mid "NETWORK"
-    kvc "IP" "$ip" "${GR}"; kvc "STATUS" "● ONLINE" "${GR}"; kv "BANDWIDTH" "0 / 3000 GB"
-    box_mid "TRAFFIC"
-    kv "TODAY" "$today"; kv "MONTH" "$month"; kv "SPEED" "0 Mbps"
-    box_bot; echo ""
-    box_top "SERVICES"
-    printf " %b ${WH}BOT${N}   %b ${WH}WS-SSH${N}   %b ${WH}SSL${N}   %b ${WH}UDP${N}   %b ${WH}XRAY${N}\n" "$d_bot" "$d_ws" "$d_ssl" "$d_udp" "$d_xry"
-    kv "HEALTH" "$hl"; kv "CAPACITY" "50 USER"; kvc "LIVE" "OK" "${GR}"
-    box_mid "ACCOUNTS"
-    box_row "${GY}SSH${N} ${WH}${acc}${N}   ${GY}ONLINE${N} ${GR}${onl}${N}   ${GY}BLOCK${N} ${WH}${blk}${N}   ${GY}BOT${N} ${WH}${bus}${N}"
-    box_bot; echo ""
-    box_top "MAIN MENU"
-    printf " ${YE}[01]${N} ${WH}%-25s${N} ${YE}[03]${N} ${WH}%s${N}\n" "STOP BOT & CLEAN CACHE" "BANDWIDTH MONITOR"
-    printf " ${YE}[02]${N} ${WH}%-25s${N} ${YE}[04]${N} ${WH}%s${N}\n" "VPS INFORMATION" "SERVICE STATUS"
-    printf " ${YE}[05]${N} ${WH}%-25s${N} ${YE}[06]${N} ${WH}%s${N}\n" "UBAH TOKEN BOT" "EXIT"
-    box_bot; echo ""
-    echo -ne "${PK}◆${N} ${PU2}Select${N} ${CY}[1-6]${N} ${PK}›${N} "; }
+    printf "${PU}╭─[${PK} SERVICES ${PU}]──────────────────────────────────────────────╮${N}\n"
+    printf " %b ${WH}BOT${N}   %b ${WH}SSH-WS${N}   %b ${WH}SSL${N}   %b ${WH}UDP${N}   %b ${WH}XRAY${N}   %b ${WH}NGIX${N}   %b ${WH}DROPBEAR${N}   %b ${WH}HAPROXY${N}\n" \
+      "$(status_dot "$bot")" "$(status_dot "$ws")" "$(status_dot "$ssl")" "$(status_dot "$udp")" "$(status_dot "$xry")" "$(status_dot "$ngx")" "$(status_dot "$drp")" "$(status_dot "$hap")"
+    printf "${PU}├─[${PK} ACCOUNTS ${PU}]───────────────────────────────────────────────┤${N}\n"
+    printf " ${GY}SSH OVPN${N} ${WH}%s${N}   ${GY}VMESS${N} ${WH}%s${N}   ${GY}VLESS${N} ${WH}%s${N}   ${GY}TROJAN${N} ${WH}%s${N}   ${GY}TOTAL${N} ${WH}%s${N}\n" "$sshc" "$vmc" "$vlc" "$trc" "$total"
+    printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
+    printf " ${GY}LIVE${N}      ${PK}›${N} ${GR}OK${N}  ${WH}online ${GR}%s${N}  ${GY}ram${N} ${WH}%s%%${N}  ${GY}cpu${N} ${WH}%s%%${N}\n\n" "$onl" "$ram" "$cpu"
+    printf "${PU}├─[${PK} TRAFFIC ${PU}]───────────────────────────────────────────────┤${N}\n"
+    printf " ${GY}TODAY${N}     ${PK}›${N} ${WH}%s${N}\n" "$today"
+    printf " ${GY}MONTH${N}     ${PK}›${N} ${WH}%s${N}\n" "$month"
+    printf " ${GY}SPEED${N}     ${PK}›${N} ${WH}%s${N}  ${GY}%s${N}\n" "$speed" "$mon"
+    printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
+    printf " ${YE}[01]${N} ${WH}STOP BOT & CLEAN CACHE${N}   ${YE}[03]${N} ${WH}BANDWIDTH${N}\n"
+    printf " ${YE}[02]${N} ${WH}VPS INFORMATION${N}         ${YE}[04]${N} ${WH}SERVICE STATUS${N}\n"
+    printf " ${YE}[05]${N} ${WH}UBAH TOKEN BOT${N}           ${YE}[06]${N} ${WH}EXIT${N}\n\n"
+    echo -ne "${PK}◆${N} ${PU2}Select${N} ${CY}[1-6]${N} ${PK}›${N} "
+}
 show_vps_info(){ clear; show_banner; box_top "VPS INFORMATION"
     kv "OS" "$(grep PRETTY_NAME /etc/os-release|cut -d= -f2|tr -d '"')"
     kv "Kernel" "$(uname -r)"; kv "Arch" "$(uname -m)"; kv "Hostname" "$(hostname)"
@@ -2416,7 +2487,7 @@ show_bandwidth(){ clear; show_banner; box_top "BANDWIDTH MONITOR"
     kvc "Status" "Monitoring Aktif" "${GR}"
     box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read; }
 show_services(){ clear; show_banner; box_top "SERVICE STATUS"
-    local svcs=("vpnbot:Telegram Bot" "ws-ssh:WS-SSH 80" "ws-ssh-alt:WS-SSH 8080" "stunnel4:SSL Tunnel" "udpgw:UDP Gateway" "xray:Xray VMess/VLESS/Trojan" "ssh:SSH Service")
+    local svcs=("vpnbot:Telegram Bot" "ws-ssh:WS-SSH 80" "ws-ssh-alt:WS-SSH 8080" "stunnel4:SSL Tunnel" "udpgw:UDP Gateway" "xray:Xray VMess/VLESS/Trojan" "nginx:Nginx" "dropbear:Dropbear 109" "haproxy:HAProxy" "ssh:SSH Service")
     for e in "${svcs[@]}"; do
         local s="${e%%:*}"; local l="${e##*:}"
         local st=$(systemctl is-active "$s" 2>/dev/null || echo off)
@@ -2510,19 +2581,20 @@ chmod +x /etc/profile.d/sansxml-menu.sh
 # 10. DONE
 clear
 echo ""
-echo -e "  ${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "  ${GREEN}        ✓✓✓ INSTALASI SELESAI ✓✓✓${NC}"
-echo -e "  ${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
+echo -e "  ${GREEN}✓ Instalasi selesai${NC}"
 echo ""
 for s in ssh ws-ssh ws-ssh-alt stunnel4 udpgw vpnbot xray; do
     ST=$(systemctl is-active "$s" 2>/dev/null || echo "n/a")
-    printf "  %-14s : " "$s"
-    [ "$ST" = "active" ] && echo -e "${GREEN}$ST${NC}" || echo -e "${RED}$ST${NC}"
+    case "$s" in
+        xray) LABEL="VPN Core" ;;
+        *) LABEL="$s" ;;
+    esac
+    printf "  %-14s " "$LABEL"
+    [ "$ST" = "active" ] && echo -e "${GREEN}✓${NC}" || echo -e "${RED}✗ $ST${NC}"
 done
 echo ""
-echo -e "  ${CYAN}Domain${NC} : ${GREEN}$DOMAIN${NC}"
-echo -e "  ${CYAN}Bot${NC}    : Cek di Telegram (/start)"
-echo -e "  ${CYAN}Log${NC}    : tail -f /root/vpnbot.log"
+echo -e "  ${CYAN}Domain${NC}  ${GREEN}$DOMAIN${NC}"
+echo -e "  ${CYAN}Bot${NC}     Cek di Telegram (/start)"
 echo ""
 sleep 2
 [ -x /usr/local/bin/sansxml-menu ] && exec /usr/local/bin/sansxml-menu
