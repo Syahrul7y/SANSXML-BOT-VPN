@@ -1,29 +1,33 @@
 #!/bin/bash
 export DEBIAN_FRONTEND=noninteractive
 CYAN='\033[1;36m'; GREEN='\033[1;32m'; RED='\033[1;31m'
-YELLOW='\033[1;33m'; MAGENTA='\033[1;35m'; WHITE='\033[1;37m'; NC='\033[0m'
+YELLOW='\033[1;33m'; MAGENTA='\033[1;35m'; WHITE='\033[1;37m'; BLUE='\033[1;34m'; NC='\033[0m'
 
 spin(){
   local pid=$1 msg="$2"
   local f=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
   while kill -0 "$pid" 2>/dev/null; do
     for x in "${f[@]}"; do
-      printf "\r  ${CYAN}${x}${NC} ${WHITE}%s${NC}   " "$msg"
+      printf "\r  ${MAGENTA}${x}${NC} ${CYAN}◆${NC} ${WHITE}%-34s${NC} ${BLUE}running...${NC}" "$msg"
       sleep 0.08
       kill -0 "$pid" 2>/dev/null || break
     done
   done
   wait "$pid"; local rc=$?
   if [ "$rc" -eq 0 ]; then
-    printf "\r  ${GREEN}✓${NC} ${WHITE}%s${NC}\n" "$msg"
+    printf "\r  ${GREEN}●${NC} ${WHITE}%-34s${NC} ${GREEN}DONE${NC}\n" "$msg"
   else
-    printf "\r  ${RED}✗${NC} ${WHITE}%s${NC} ${RED}(error)${NC}\n" "$msg"
+    printf "\r  ${RED}●${NC} ${WHITE}%-34s${NC} ${RED}FAILED${NC}\n" "$msg"
   fi
   return "$rc"
 }
 
 clear
-echo ""
+printf "\n${MAGENTA}╭━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╮${NC}\n"
+printf "${MAGENTA}┃${NC}   ${CYAN}✦${NC} ${WHITE}SANSXML${NC} ${MAGENTA}VPN STORE${NC}  ${CYAN}◆${NC}  ${WHITE}VPS INSTALLER${NC}                 ${MAGENTA}┃${NC}\n"
+printf "${MAGENTA}┃${NC}   ${BLUE}Premium VPN Server • Automated Installation${NC}              ${MAGENTA}┃${NC}\n"
+printf "${MAGENTA}╰━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━╯${NC}\n"
+printf "  ${CYAN}◆${NC} ${WHITE}Starting installation...${NC} ${BLUE}Please wait${NC}\n\n"
 
 # 1. DEPENDENCIES
 
@@ -398,7 +402,9 @@ CFGEOF
 
 # 7. BOT.PY
 echo ""
-echo -e "  ${YELLOW}▸ Install Bot.py${NC}"
+echo -e "\n  ${MAGENTA}╭─ BOT ENGINE ${CYAN}◆${MAGENTA}──────────────────────────────────────────────╮${NC}"
+echo -e "  ${MAGENTA}│${NC} ${CYAN}▸${NC} ${WHITE}Install Bot.py${NC}                                      ${MAGENTA}│${NC}"
+echo -e "  ${MAGENTA}╰──────────────────────────────────────────────────────────────╯${NC}"
 
 cat > /root/bot.py << 'BOTPYEOF'
 #!/usr/bin/env python3
@@ -2325,13 +2331,15 @@ fi
 
 # 9. MENU VPS
 echo ""
-echo -e "  ${YELLOW}▸ Install Menu VPS${NC}"
+echo -e "\n  ${MAGENTA}╭─ CONTROL PANEL ${CYAN}◆${MAGENTA}────────────────────────────────────────╮${NC}"
+echo -e "  ${MAGENTA}│${NC} ${CYAN}▸${NC} ${WHITE}Install VPS Dashboard${NC}                              ${MAGENTA}│${NC}"
+echo -e "  ${MAGENTA}╰──────────────────────────────────────────────────────────────╯${NC}"
 
 cat > /usr/local/bin/sansxml-menu << 'MENUEOF'
 #!/bin/bash
-PU='\033[1;35m'; PU2='\033[1;95m'; CY='\033[1;35m'
-PK='\033[1;35m'; WH='\033[1;35m'; GR='\033[1;32m'
-RE='\033[1;31m'; YE='\033[1;35m'; GY='\033[1;35m'; N='\033[0m'
+PU='\033[1;35m'; PU2='\033[1;95m'; CY='\033[1;36m'
+PK='\033[1;35m'; WH='\033[1;37m'; GR='\033[1;32m'
+RE='\033[1;31m'; YE='\033[1;33m'; GY='\033[1;36m'; N='\033[0m'
 W=62
 get_ip(){ hostname -I 2>/dev/null | awk '{print $1}'; }
 get_uptime(){ local s=$(cat /proc/uptime|awk '{print int($1)}'); echo "$((s/86400))d $(((s%86400)/3600))h $(((s%3600)/60))m"; }
@@ -2406,8 +2414,8 @@ show_banner(){
     total=$((sshc+vmc+vlc+trc)); onl=$(get_online)
 
     echo ""
-    printf "        ${WH}sansxml${N}  ${GY}◆${N}  ${WH}VPS${N}\n"
-    printf "        ${GY}%s${N}\n\n" "$now"
+    printf "        ${PU2}✦${N} ${WH}sansxml${N}  ${CY}◆${N}  ${PU2}VPS${N}  ${CY}◆${N}\n"
+    printf "        ${CY}%s${N}\n\n" "$now"
 
     printf "${PU}╭─ ${PK}SERVER${PU} ─────────────────────────────────────────────────────╮${N}\n"
     printf " ${GY}OS${N}       ${WH}%s${N}   ${GY}CPU${N} ${WH}%s vCPU${N}\n" "$os" "$cpu"
@@ -2500,11 +2508,11 @@ get_cpu_pct(){
 show_menu(){ clear
     show_banner
     printf "\n${PU}╭─ ${PK}MENU${PU} ───────────────────────────────────────────────────────╮${N}\n"
-    printf " ${PU}[1]${N}  ${PU}AUTO STOP BOT${N}          ${PU}[4]${N}  ${PU}SERVICE STATUS${N}\n"
-    printf " ${PU}[2]${N}  ${PU}VPS INFORMATION${N}        ${PU}[5]${N}  ${PU}ADD TOKEN BOT${N}\n"
-    printf " ${PU}[3]${N}  ${PU}BANDWIDTH${N}              ${PU}[6]${N}  ${PU}EXIT${N}\n"
+    printf " ${CY}[1]${N}  ${WH}AUTO STOP BOT${N}          ${CY}[4]${N}  ${WH}SERVICE STATUS${N}\n"
+    printf " ${CY}[2]${N}  ${WH}VPS INFORMATION${N}        ${CY}[5]${N}  ${WH}ADD TOKEN BOT${N}\n"
+    printf " ${CY}[3]${N}  ${WH}BANDWIDTH${N}              ${CY}[6]${N}  ${WH}EXIT${N}\n"
     printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
-    echo -ne "${CY}◆${N} ${GY}Select${N} ${WH}[1-6]${N} ${CY}›${N} "
+    echo -ne "${PU2}✦${N} ${CY}Select${N} ${WH}[1-6]${N} ${PU2}›${N} "
 }
 show_vps_info(){ clear; show_banner; box_top "VPS INFORMATION"
     kv "OS" "$(grep PRETTY_NAME /etc/os-release|cut -d= -f2|tr -d '"')"
