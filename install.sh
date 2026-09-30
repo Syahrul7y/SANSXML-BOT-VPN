@@ -289,7 +289,7 @@ XRAYEOF
   echo '{"protocol":"trojan","accounts":[]}' > /etc/xray/accounts/trojan.json
 
   # Validate the Xray configuration before creating/starting the service.
-  xray run -test -config /etc/xray/config.json
+  xray run -test -config /etc/xray/config.json >/dev/null 2>&1
 
   # Always create our own systemd unit so the installer does not depend on
   # the upstream installer having created xray.service.
@@ -363,11 +363,9 @@ SSHEOF
 systemctl restart ssh 2>/dev/null || systemctl restart sshd
 
 # 6. BOT CONFIG
-echo ""
-echo -e "  ${CYAN}›${NC} ${WHITE}Telegram VPN Bot${NC}"
-echo ""
-read -r -p "$(echo -e ${GREEN}'  Bot Token Telegram : '${NC})" BOT_TOKEN < /dev/tty
-if [ -z "$BOT_TOKEN" ]; then echo -e "  ${RED}❌ Token tidak boleh kosong${NC}"; exit 1; fi
+# Token Telegram sengaja dikosongkan saat instalasi.
+# Token hanya diisi melalui menu [05] ADD TOKEN BOT.
+BOT_TOKEN=""
 
 GH_USER="Syahrul7y"; GH_REPO="Backup"
 GH_EMAIL="hodamkecil@gmail.com"
@@ -2317,8 +2315,13 @@ WantedBy=multi-user.target
 SVCEOF
 systemctl daemon-reload
 systemctl enable vpnbot >/dev/null 2>&1
-systemctl restart vpnbot
-sleep 3
+# Bot baru dijalankan setelah token diisi lewat menu [05].
+if [ -n "$BOT_TOKEN" ]; then
+    systemctl restart vpnbot
+    sleep 3
+else
+    systemctl stop vpnbot >/dev/null 2>&1 || true
+fi
 
 # 9. MENU VPS
 echo ""
@@ -2402,9 +2405,6 @@ show_banner(){
     sshc=$(get_ssh_count); vmc=$(get_xray_count vmess); vlc=$(get_xray_count vless); trc=$(get_xray_count trojan)
     total=$((sshc+vmc+vlc+trc)); onl=$(get_online)
     echo ""
-    printf "${PU}╭──────────────────────────────────────────────────────────────╮${N}\n"
-    printf "${PU}│${N}          ${PK}SC SANSXML VPN BOT STORE${N}                         ${PU}│${N}\n"
-    printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n"
     printf "           ${WH}sansxml${N}  ${GY}◆${N}  ${WH}VPS${N}  ${GY}◆${N}  ${WH}%s${N}\n" "$now"
     printf "${PU}╭─[${PK} SERVER ${PU}]───────────────────────────────────────────────────╮${N}\n"
     printf " ${GY}OS${N}        ${PK}›${N} ${WH}%s${N}\n" "$os"
@@ -2496,9 +2496,9 @@ get_cpu_pct(){
 show_menu(){ clear
     show_banner
     printf "${PU}├─[${PK} MENU ${PU}]─────────────────────────────────────────────────────┤${N}\n"
-    printf " ${YE}[01]${N} ${WH}STOP BOT & CLEAN CACHE${N}   ${YE}[03]${N} ${WH}BANDWIDTH${N}\n"
-    printf " ${YE}[02]${N} ${WH}VPS INFORMATION${N}         ${YE}[04]${N} ${WH}SERVICE STATUS${N}\n"
-    printf " ${YE}[05]${N} ${WH}UBAH TOKEN BOT${N}           ${YE}[06]${N} ${WH}EXIT${N}\n"
+    printf " ${YE}[01]${N} ${WH}AUTO STOP BOT${N}        ${YE}[03]${N} ${WH}BANDWIDTH${N}\n"
+    printf " ${YE}[02]${GR} VPS INFORMATION${N}      ${YE}[04]${N} ${WH}SERVICE STATUS${N}\n"
+    printf " ${YE}[05]${N} ${WH}ADD TOKEN BOT${N}         ${YE}[06]${N} ${WH}EXIT${N}\n"
     printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
     echo -ne "${PK}◆${N} ${PU2}Select${N} ${CY}[1-6]${N} ${PK}›${N} "
 }
