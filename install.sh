@@ -2491,7 +2491,7 @@ get_cpu_pct(){
     a=$(awk '/^cpu /{print $2+$3+$4+$5+$6+$7+$8, $5}' /proc/stat)
     sleep 0.2
     b=$(awk '/^cpu /{print $2+$3+$4+$5+$6+$7+$8, $5}' /proc/stat)
-    awk -v a="$a" -v b="$b" 'BEGIN{split(a,x);split(b,y);dt=y[1]-x[1];di=y[2]-x[2];printf "%d",dt>0?((dt-di)/dt)*100:0}'
+    awk -v a="$a" -v b="$b" 'BEGIN { split(a,x); split(b,y); dt=y[1]-x[1]; di=y[2]-x[2]; if (dt > 0) printf "%d", ((dt-di)/dt)*100; else printf "0" }'
 }
 show_menu(){ clear
     show_banner
