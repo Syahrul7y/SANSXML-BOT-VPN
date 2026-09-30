@@ -10,7 +10,7 @@ spin(){ local pid=$1 msg="$2"; local f=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦
 clear
 echo ""
 echo -e "  ${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
-echo -e "  ${CYAN}    SANSXML VPN STORE — AUTO INSTALL v9${NC}"
+echo -e "  ${CYAN}    SANSXML VPN STORE — AUTO INSTALL v10${NC}"
 echo -e "  ${MAGENTA}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}"
 echo ""
 
@@ -969,8 +969,12 @@ def xray_server_text(proto):
     lines += ["─────────────────────────","</blockquote>"]
     return "\n".join(lines)
 def saldo_text(uid, nom=""):
-    return (f"<blockquote>\n💰 <b>Masukkan nominal topup:</b>\n\nJumlah saat ini: <b>{rupiah(get_bal(uid))}</b>\n\n"
-            f"Nominal input: <b>{rupiah(nom) if nom else 'Rp 0'}</b>\n\n<i>Minimal {rupiah(MIN_TOPUP)}</i>\n</blockquote>")
+    return (f"<blockquote>💰 <b>Silakan masukkan jumlah nominal topup saldo yang Anda inginkan:</b>\n\n"
+            f"Jumlah saat ini: <b>{rupiah(get_bal(uid))}</b>\n\n"
+            f"Nominal input: <b>{rupiah(nom) if nom else 'Rp 0'}</b>\n"
+            f"Minimal topup {rupiah(MIN_TOPUP)}\n\n"
+            f"❖ <i>Saldo dapat digunakan untuk membuat akun VPN</i> ❖\n</blockquote>")
+
 def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="sg_1ip"):
     srv = SERVERS.get(server_key, {})
     head = "TRIAL" if is_trial else ("MANUAL" if manual else "PREMIUM")
@@ -991,8 +995,8 @@ def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="sg_
     ssl_link = f"{host}:443@{u}:{p}"
     ws_link = f"{host}:80@{u}:{p}"
     udp_link = f"{host}:1-65535@{u}:{p}"
-    L = ["<blockquote>",
-         "◤ <b>SSH OVPN ACCOUNT</b> ◢", f"     ❖ <b>{head}</b> ❖", "━━━━━━━━━━━━━━━━━━━━━━━", "", "",
+    L = ["◤ <b>SSH OVPN ACCOUNT</b> ◢",
+         f"     ❖ <b>{head}</b> ❖", "━━━━━━━━━━━━━━━━━━━━━━━", "", "",
          f"City       : {srv.get('city','Singapore')}",
          f"ISP        : {srv.get('isp','DigitalOcean LLC')}",
          f"SSH OVPN   : {ssh_ovpn_val}",
@@ -1005,15 +1009,15 @@ def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="sg_
          "OpenSSH  : 443, 80, 22", "Dropbear : 443, 109",
          "SSH WS   : 80, 8080, 8081-9999", "SSH SSL  : 443", "SSH UDP  : 1-65535",
          "OVPN     : 443, 1194, 2200", "BadVPN   : 7100, 7300",
-         "━━━━━━━━━━━━━━━━━━━━━━━", "",
+         "━━━━━━━━━━━━━━━━━━━━━━━",
          f"SSL : {ssl_link}", "", f"WS  : {ws_link}", "", f"UDP : {udp_link}",
-         "━━━━━━━━━━━━━━━━━━━━━━━", "",
+         "━━━━━━━━━━━━━━━━━━━━━━━",
          "PAYLOAD WS", payload_ws, "", "PAYLOAD TLS", payload_tls,
-         "━━━━━━━━━━━━━━━━━━━━━━━", "",
+         "━━━━━━━━━━━━━━━━━━━━━━━",
          f"Durasi   : {dl}", f"Dibuat   : {created_fmt}", f"Berakhir : {exp_fmt}", "",
          "━━━━━━━━━━━━━━━━━━━━━━━",
          "<b>      ◤ SANSXML VPN STORE ◢</b>",
-         "<i>❖ Terima kasih ❖</i>", "</blockquote>"]
+         "<i>❖ Terima kasih telah menggunakan layanan kami ❖</i>"]
     return "\n".join(L)
 def xray_caption(proto, un, pw, cred, exp, days, sk, is_trial=False):
     s = SERVERS.get(sk,{}); host = s.get("domain") or SSH_HOST
@@ -1044,7 +1048,7 @@ def xray_caption(proto, un, pw, cred, exp, days, sk, is_trial=False):
         url2 = xray_build_trojan(host,443,cred,'/trojan',True,f'{ssh_ovpn}-WS')
         url3 = xray_build_trojan_grpc(host,cred,'trojan-grpc',f'{ssh_ovpn}-gRPC')
         t1 = "── TROJAN TCP ──"; t2 = "── TROJAN WS TLS ──"; t3 = "── TROJAN gRPC TLS ──"
-    L = ["<blockquote>",f"◤ <b>{head} ACCOUNT</b> ◢",f"     ❖ <b>{lbl}</b> ❖","━━━━━━━━━━━━━━━━━━━━━━━","",""]
+    L = [f"◤ <b>{head} ACCOUNT</b> ◢",f"     ❖ <b>{lbl}</b> ❖","━━━━━━━━━━━━━━━━━━━━━━━","",""]
     L += [f"City       : {city}",f"ISP        : {isp}",f"SSH OVPN   : {ssh_ovpn}",f"Username   : {un}"]
     if proto == "trojan": L += [f"Password   : {cred}"]
     else: L += [f"Password   : {pw}",f"UUID       : {cred}"]
@@ -1062,7 +1066,7 @@ def xray_caption(proto, un, pw, cred, exp, days, sk, is_trial=False):
           "━━━━━━━━━━━━━━━━━━━━━━━","",f"Durasi     : {TRIAL_DURATION_MIN} Minute" if is_trial else f"Durasi     : {days} Hari",
           f"Dibuat     : {cf}",f"Berakhir   : {ef}","",
           "━━━━━━━━━━━━━━━━━━━━━━━","<b>      ◤ SANSXML VPN STORE ◢</b>",
-          "<i>❖ Terima kasih ❖</i>","</blockquote>"]
+          "<i>❖ Terima kasih telah menggunakan layanan kami ❖</i>"]
     return "\n".join(L)
 
 # ACTIONS
@@ -1071,12 +1075,17 @@ async def do_create(chat, uid, user, un, pw, hari, is_trial=False, sk="sg_1ip"):
     price = 0 if is_trial else get_price(hari,sk)
     if not is_trial and get_bal(uid) < price:
         kurang = price - get_bal(uid)
-        msg_saldo = ("<pre>┌─────────────────────────────────────┐\n│ ❌ Saldo Tidak Cukup                │\n│                                     │\n"
-            f"│ 💰 Saldo Anda : {rupiah(get_bal(uid)):<20}│\n│ 💵 Harga Akun : {rupiah(price):<20}│\n│ 📉 Kurang     : {rupiah(kurang):<20}│\n"
-            "└─────────────────────────────────────┘</pre>\n\nSilakan topup saldo melalui menu\nTombol 💰 TOPUP SALDO.")
+        msg_saldo = (f"<blockquote>❌ <b>Saldo Tidak Cukup</b>\n\n"
+            f"💰 Saldo Anda : <b>{rupiah(get_bal(uid))}</b>\n"
+            f"💵 Harga Akun : <b>{rupiah(price)}</b>\n"
+            f"📉 Kurang     : <b>{rupiah(kurang)}</b>\n\n"
+            "Silakan topup saldo melalui menu\n"
+            "Tombol 💰 TOPUP SALDO.</blockquote>")
         kb = InlineKeyboardMarkup([[B("💰 TOPUP SALDO","isi_saldo",style="success")],[B("🔙 Kembali","menu|main",style="danger")]])
         await chat.send_message(msg_saldo,reply_markup=kb,parse_mode="HTML"); return
-    m = await chat.send_message(f"⚙️ Membuat <b>{'TRIAL' if is_trial else 'PREMIUM'} AKUN</b>...",parse_mode="HTML")
+    hdr = "TRIAL" if is_trial else "PREMIUM"
+    srv_num = list(SERVERS.keys()).index(sk) + 1 if sk in SERVERS else 1
+    m = await chat.send_message(f"⚙️ Membuat {hdr} AKUN untuk server {srv_num}...", parse_mode="HTML")
     r = await asyncio.to_thread(ssh_create,un,pw,hari,is_trial,sk)
     if not is_trial:
         ok,_ = reduce_bal(uid,price)
@@ -1096,12 +1105,15 @@ async def do_extend(chat, uid, user, un, hari, sk):
     price = get_price(hari,sk)
     if get_bal(uid) < price:
         kurang = price - get_bal(uid)
-        msg_saldo = ("<pre>┌─────────────────────────────────────┐\n│ ❌ Saldo Tidak Cukup                │\n│                                     │\n"
-            f"│ 💰 Saldo Anda : {rupiah(get_bal(uid)):<20}│\n│ 💵 Harga Akun : {rupiah(price):<20}│\n│ 📉 Kurang     : {rupiah(kurang):<20}│\n"
-            "└─────────────────────────────────────┘</pre>\n\nSilakan topup saldo melalui menu\nTombol 💰 TOPUP SALDO.")
+        msg_saldo = (f"<blockquote>❌ <b>Saldo Tidak Cukup</b>\n\n"
+            f"💰 Saldo Anda : <b>{rupiah(get_bal(uid))}</b>\n"
+            f"💵 Harga Akun : <b>{rupiah(price)}</b>\n"
+            f"📉 Kurang     : <b>{rupiah(kurang)}</b>\n\n"
+            "Silakan topup saldo melalui menu\n"
+            "Tombol 💰 TOPUP SALDO.</blockquote>")
         kb = InlineKeyboardMarkup([[B("💰 TOPUP SALDO","isi_saldo",style="success")],[B("🔙 Kembali","menu|main",style="danger")]])
         await chat.send_message(msg_saldo,reply_markup=kb,parse_mode="HTML"); return
-    m = await chat.send_message(f"⚙️ Memperpanjang <b>{un}</b> {hari} hari...",parse_mode="HTML")
+    m = await chat.send_message(f"⚙️ Memperpanjang akun {un} selama {hari} hari...", parse_mode="HTML")
     a = get_acc(un)
     try: oe = datetime.strptime(a["exp"],"%Y-%m-%d").date()
     except: oe = datetime.now().date()
@@ -1121,13 +1133,17 @@ async def do_create_xray(chat, uid, user, un, pw, hari, sk, proto, is_trial=Fals
     s = SERVERS.get(sk,{}); price = 0 if is_trial else get_price(hari,sk)
     if not is_trial and get_bal(uid) < price:
         kurang = price - get_bal(uid)
-        msg_saldo = ("<pre>┌─────────────────────────────────────┐\n│ ❌ Saldo Tidak Cukup                │\n│                                     │\n"
-            f"│ 💰 Saldo Anda : {rupiah(get_bal(uid)):<20}│\n│ 💵 Harga Akun : {rupiah(price):<20}│\n│ 📉 Kurang     : {rupiah(kurang):<20}│\n"
-            "└─────────────────────────────────────┘</pre>\n\nSilakan topup saldo melalui menu\nTombol 💰 TOPUP SALDO.")
+        msg_saldo = (f"<blockquote>❌ <b>Saldo Tidak Cukup</b>\n\n"
+            f"💰 Saldo Anda : <b>{rupiah(get_bal(uid))}</b>\n"
+            f"💵 Harga Akun : <b>{rupiah(price)}</b>\n"
+            f"📉 Kurang     : <b>{rupiah(kurang)}</b>\n\n"
+            "Silakan topup saldo melalui menu\n"
+            "Tombol 💰 TOPUP SALDO.</blockquote>")
         kb = InlineKeyboardMarkup([[B("💰 TOPUP SALDO","isi_saldo",style="success")],[B("🔙 Kembali","menu|main",style="danger")]])
         await chat.send_message(msg_saldo,reply_markup=kb,parse_mode="HTML"); return
     hdr = 'TRIAL' if is_trial else 'PREMIUM'
-    m = await chat.send_message(f"⚙️ Membuat <b>{hdr} {proto.upper()}</b> akun...",parse_mode="HTML")
+    srv_num = list(SERVERS.keys()).index(sk) + 1 if sk in SERVERS else 1
+    m = await chat.send_message(f"⚙️ Membuat {hdr} AKUN untuk server {srv_num}...", parse_mode="HTML")
     cred = str(uuid.uuid4()) if proto in ("vmess","vless") else pw
     ok, err = await asyncio.to_thread(xray_add_user,proto,cred)
     if not ok:
@@ -1266,11 +1282,11 @@ async def cb(u,c):
         cur = c.user_data.get("saldo_input","")
         if not cur or int(cur)<=0: await q.answer("Nominal belum diisi!",show_alert=True); return
         nom = int(cur)
-        if nom < MIN_TOPUP: await q.answer(f"❌ Minimal {rupiah(MIN_TOPUP)}",show_alert=True); return
+        if nom < MIN_TOPUP: await q.answer(f"❌ Minimal topup {rupiah(MIN_TOPUP)}",show_alert=True); return
         sb = add_bal(uid,nom)
         add_trx(uid,u.effective_user.first_name or "",u.effective_user.username or "","isi_saldo",nom,"topup")
         c.user_data["saldo_input"] = ""
-        try: await q.edit_message_text(f"✅ <b>Topup Berhasil</b>\n\n<blockquote>💰 Nominal: <b>{rupiah(nom)}</b>\n💼 Saldo: <b>{rupiah(sb)}</b></blockquote>",
+        try: await q.edit_message_text(f"<blockquote>✅ <b>Topup Saldo Berhasil</b>\n\n💰 Nominal: <b>{rupiah(nom)}</b>\n💼 Saldo Sekarang: <b>{rupiah(sb)}</b></blockquote>",
             reply_markup=InlineKeyboardMarkup([[B("🔙 Kembali","menu|main",style="danger")]]),parse_mode="HTML")
         except: pass
         asyncio.create_task(sync_push_async()); return
@@ -1484,14 +1500,15 @@ async def cb(u,c):
         k = p[1]; f = p[2]
         if k not in SERVERS: await q.answer("No",show_alert=True); return
         c.user_data["srv_edit"] = {"key":k,"field":f}
-        pr = {"name":"Kirim nama. Contoh: <code>🇮🇩 INDO</code>",
-              "city":"Kirim nama kota. Contoh: <code>Singapore</code>",
-              "isp":"Kirim nama ISP. Contoh: <code>DigitalOcean LLC</code>",
-              "price_month":"Harga BULANAN. Contoh: <code>3000</code>",
-              "quota_gb":"Quota GB. Contoh: <code>700</code>",
-              "ip_limit":"Limit IP. Contoh: <code>1</code>",
-              "slot_max":"Slot. Contoh: <code>50</code>",
-              "domain":"Domain. Contoh: <code>domain.com</code>"}
+        sname = SERVERS[k].get("name","server")
+        pr = {"name":f"Kirim nama baru untuk server <b>{sname}</b>\nContoh: <code>{sname}</code>",
+              "city":f"Kirim nama kota baru untuk <b>{sname}</b>\nContoh: <code>Singapore</code>",
+              "isp":f"Kirim nama ISP baru untuk <b>{sname}</b>\nContoh: <code>DigitalOcean LLC</code>",
+              "price_month":f"Kirim harga BULANAN (30 hari) baru untuk <b>{sname}</b>\nContoh: <code>3510</code>\n<i>Harga harian otomatis = harga bulanan ÷ 30</i>",
+              "quota_gb":f"Kirim quota GB baru untuk <b>{sname}</b>\nContoh: <code>700</code>",
+              "ip_limit":f"Kirim limit IP baru untuk <b>{sname}</b>\nContoh: <code>2</code>",
+              "slot_max":f"Kirim jumlah slot server baru untuk <b>{sname}</b>\nContoh: <code>50</code>",
+              "domain":f"Kirim DOMAIN baru untuk <b>{sname}</b>\nContoh: <code>sgivip.naaofficial.web.id</code>"}
         try: await q.edit_message_text(pr.get(f,"Kirim:"),reply_markup=InlineKeyboardMarkup([[B("❌ Batal",f"srv_edit|{k}",style="danger")]]),parse_mode="HTML")
         except: pass
         return
@@ -1670,7 +1687,7 @@ async def cb(u,c):
     if d == "admin|bc":
         if not is_owner(uid): return
         c.user_data["bc_wait"] = True
-        try: await q.edit_message_text("📢 <b>BROADCAST</b>\n\nKetik pesan:",
+        try: await q.edit_message_text("<blockquote>📢 <b>BROADCAST PENGUMUMAN</b>\n\nSilakan ketik pesan pengumuman yang ingin dikirim ke semua user.\n\n<i>Pesan akan dikirim ke seluruh user bot (kecuali yang memblokir bot).</i></blockquote>",
             reply_markup=InlineKeyboardMarkup([[B("❌ Batal","admin|menu",style="danger")]]),parse_mode="HTML")
         except: pass
         return
@@ -1678,7 +1695,7 @@ async def cb(u,c):
         if not is_owner(uid): return
         mt = c.user_data.get("bc_text","")
         if not mt: await q.answer("Kosong",show_alert=True); return
-        try: await q.edit_message_text("📤 Mengirim...",parse_mode="HTML")
+        try: await q.edit_message_text("📤 Mengirim broadcast...",parse_mode="HTML")
         except: pass
         users = load_json(USERS_FILE,{}); ok = 0; fl = 0
         for tu in users.keys():
@@ -1687,7 +1704,7 @@ async def cb(u,c):
             except: fl += 1
             await asyncio.sleep(0.05)
         c.user_data["bc_text"] = ""; c.user_data["bc_wait"] = False
-        try: await q.edit_message_text(f"✅ <b>Selesai</b>\n\n├ Sukses: <b>{ok}</b>\n╰ Gagal: <b>{fl}</b>",
+        try: await q.edit_message_text(f"<blockquote>✅ <b>Broadcast Selesai</b>\n\n├ Sukses : <b>{ok}</b>\n╰ Gagal  : <b>{fl}</b>\n\n❖ <i>Pesan berhasil dikirim ke user yang tidak memblokir bot</i> ❖</blockquote>",
             reply_markup=InlineKeyboardMarkup([[B("🔙 Kembali","admin|menu",style="danger")]]),parse_mode="HTML")
         except: pass
         return
@@ -1699,19 +1716,30 @@ async def cb(u,c):
         try: await q.edit_message_reply_markup(reply_markup=kb_srv_lock())
         except: pass
         c.user_data["extend_step"] = "username"; c.user_data["extend_data"] = {"server_key":sk}
-        await chat.send_message("👤 Masukkan username akun :",parse_mode="HTML")
+        await chat.send_message("👤 Masukkan username akun yang ingin diperpanjang :",parse_mode="HTML")
         return
     if d.startswith("buat|"):
         if c.user_data.get("created_in_session"): return
         sk = d.split("|")[1]
         if sk not in SERVERS: await chat.send_message("❌ Server tidak valid.",parse_mode="HTML"); return
         used,mx = get_slot_info(sk)
-        if used >= mx: await chat.send_message(f"<blockquote>❌ <b>Slot Penuh</b> {used}/{mx}</blockquote>",parse_mode="HTML"); return
+        s = SERVERS[sk]
+        if used >= mx:
+            await chat.send_message(
+                f"<blockquote>❌ <b>Slot Penuh</b>\n\n"
+                f"Server {s.get('name','-')}\n"
+                f"Slot tersedia: <b>{used}/{mx}</b>\n\n"
+                f"Silakan pilih server lain.</blockquote>",
+                parse_mode="HTML"); return
         mode = c.user_data.get("mode","buat")
         try: await q.edit_message_reply_markup(reply_markup=kb_srv_lock())
         except: pass
         if mode == "trial":
-            if trial_left(uid) <= 0: await chat.send_message("🚫 <b>Batas trial tercapai</b>",parse_mode="HTML"); return
+            if trial_left(uid) <= 0:
+                await chat.send_message("🚫 Batas trial hari ini telah tercapai.\nSilakan coba lagi besok.",
+                    reply_markup=InlineKeyboardMarkup([[B("🔙 Kembali","menu|main",style="danger")]]),
+                    parse_mode="HTML")
+                return
             use_trial(uid)
             uq = ''.join(random.choices(string.ascii_lowercase+string.digits,k=4))
             c.user_data.clear(); c.user_data["created_in_session"] = True
@@ -1727,13 +1755,23 @@ async def cb(u,c):
         sk = d.split("|")[1]
         if sk not in SERVERS: await chat.send_message("❌ Server tidak valid.",parse_mode="HTML"); return
         used,mx = get_slot_info(sk)
-        if used >= mx: await chat.send_message(f"<blockquote>❌ <b>Slot Penuh</b></blockquote>",parse_mode="HTML"); return
+        s = SERVERS[sk]
+        if used >= mx:
+            await chat.send_message(
+                f"<blockquote>❌ <b>Slot Penuh</b>\n\n"
+                f"Server {s.get('name','-')}\n"
+                f"Slot tersedia: <b>{used}/{mx}</b>\n\n"
+                f"Silakan pilih server lain.</blockquote>",
+                parse_mode="HTML"); return
         mode = c.user_data.get("mode","buat")
         try: await q.edit_message_reply_markup(reply_markup=kb_srv_lock())
         except: pass
         if mode == "trial":
             if trial_left(uid) <= 0:
-                await chat.send_message("🚫 <b>Batas trial tercapai</b>",parse_mode="HTML"); return
+                await chat.send_message("🚫 Batas trial hari ini telah tercapai.\nSilakan coba lagi besok.",
+                    reply_markup=InlineKeyboardMarkup([[B("🔙 Kembali","menu|main",style="danger")]]),
+                    parse_mode="HTML")
+                return
             use_trial(uid)
             uq = ''.join(random.choices(string.ascii_lowercase+string.digits,k=4))
             c.user_data.clear(); c.user_data["created_in_session"] = True
@@ -1755,8 +1793,8 @@ async def cb(u,c):
             except: continue
             accs.append(a)
         hdr = ["<blockquote>","💻 <b>AKUN SAYA</b>","───────────────────────","",
-               f"📭 Akun Aktif : <b>{len(accs)}</b>",""]
-        if not accs: hdr += ["Belum ada akun aktif.",""]
+               f"📭 Total Akun : <b>{len(accs)}</b>",""]
+        if not accs: hdr += ["Belum ada akun premium.","Silakan buat akun terlebih dahulu.",""]
         hdr += ["───────────────────────","</blockquote>"]
         if not accs:
             rows = [[B("➕ BUAT AKUN","buat_akun",style="primary")],[B("🔙 KEMBALI","menu|main",style="danger")]]
@@ -1785,7 +1823,12 @@ async def cb(u,c):
             ref = 0 if (a.get("is_trial") or int(a.get("harga",0))<=0) else hitung_refund(a)
             cap = acc_caption(a.get("username",un),a['password'],a['exp'],dl,a.get('limit_ip',1),a.get('manual',False),a.get('is_trial',False),a.get('server_key','sg_1ip'))
             b = get_block_info(a.get("username",un))
-            if b: cap += "\n\n🚫 <b>DIBLOKIR</b>"
+            if b:
+                try:
+                    ua = datetime.strptime(b["unblock_at"],"%Y-%m-%d %H:%M:%S")
+                    total_min = max(0, int((ua - datetime.now()).total_seconds() // 60))
+                    cap += f"\n\n🚫 <b>AKUN SEDANG DIBLOKIR</b>\n├ Alasan: Melebihi limit IP\n╰ Terbuka otomatis dalam: {total_min//60}j {total_min%60}m"
+                except: pass
             elif ref > 0: cap += f"\n\n💰 <b>Refund: {rupiah(ref)}</b>"
             else: cap += "\n\n💰 <i>Refund: Rp 0</i>"
         else:
@@ -1813,12 +1856,29 @@ async def cb(u,c):
         except: pass
         sb = get_bal(uid)
         dun = a.get("username", un)
+        srv_name = a.get("server","-")
+        try:
+            ed = datetime.strptime(a["exp"],"%Y-%m-%d").date()
+            sh = max(0,(ed-datetime.now().date()).days)
+        except: sh = 0
+        th = int(a.get("days",30))
+        pct = int(round((sh/th)*100)) if th > 0 else 0
+        msg_del = ("<blockquote>✅ <b>Akun Dihapus</b>\n\n"
+                   f"👤 <b>Akun</b>\n"
+                   f"├ User: <code>{dun}</code>\n"
+                   f"├ Server: <b>{srv_name}</b>\n"
+                   f"├ Durasi: <b>{th} Hari</b>\n"
+                   f"╰ Harga: <b>{rupiah(int(a.get('harga',0)))}</b>\n\n")
         if ref > 0:
-            try: await chat.send_message(f"✅ <b>Akun Dihapus</b>\n\n👤 <code>{dun}</code>\n💰 Refund: <b>{rupiah(ref)}</b>\n💼 Saldo: <b>{rupiah(sb)}</b>", parse_mode="HTML")
-            except: pass
-        else:
-            try: await chat.send_message(f"✅ <b>Akun Dihapus</b>\n\n👤 <code>{dun}</code>", parse_mode="HTML")
-            except: pass
+            msg_del += (f"💰 <b>Refund</b>\n"
+                       f"├ Sisa: <b>{sh}/{th} hari</b>\n"
+                       f"├ Persen: <b>{pct}%</b>\n"
+                       f"╰ Refund: <b>{rupiah(ref)}</b>\n\n"
+                       f"💼 Saldo: <b>{rupiah(sb)}</b>\n\n"
+                       f"❖ <i>Refund masuk ke saldo</i> ❖")
+        msg_del += "</blockquote>"
+        try: await chat.send_message(msg_del, parse_mode="HTML")
+        except: pass
         return
 
 async def msg(u,c):
@@ -1971,7 +2031,7 @@ async def msg(u,c):
 
     if c.user_data.get("bc_wait") and is_owner(uid):
         c.user_data["bc_wait"] = False; c.user_data["bc_text"] = t
-        await u.message.reply_text(f"📢 <b>PREVIEW</b>\n\n<blockquote>{t}</blockquote>\n\nKirim?",
+        await u.message.reply_text(f"<blockquote>📢 <b>PREVIEW BROADCAST</b>\n\n{t}\n\nKirim pesan ini ke semua user?</blockquote>",
             reply_markup=InlineKeyboardMarkup([[B("✅ Kirim","bc_send",style="success")],
                 [B("❌ Batal","admin|menu",style="danger")]]),parse_mode="HTML")
         return
@@ -2014,9 +2074,12 @@ async def msg(u,c):
                 await u.message.reply_text("⚠️ <b>Backup belum siap</b>",parse_mode="HTML"); return
             if get_bal(uid) < price:
                 kurang = price - get_bal(uid)
-                msg_saldo = ("<pre>┌─────────────────────────────────────┐\n│ ❌ Saldo Tidak Cukup                │\n│                                     │\n"
-                    f"│ 💰 Saldo Anda : {rupiah(get_bal(uid)):<20}│\n│ 💵 Harga Akun : {rupiah(price):<20}│\n│ 📉 Kurang     : {rupiah(kurang):<20}│\n"
-                    "└─────────────────────────────────────┘</pre>\n\nSilakan topup saldo melalui menu\nTombol 💰 TOPUP SALDO.")
+                msg_saldo = (f"<blockquote>❌ <b>Saldo Tidak Cukup</b>\n\n"
+                    f"💰 Saldo Anda : <b>{rupiah(get_bal(uid))}</b>\n"
+                    f"💵 Harga Akun : <b>{rupiah(price)}</b>\n"
+                    f"📉 Kurang     : <b>{rupiah(kurang)}</b>\n\n"
+                    "Silakan topup saldo melalui menu\n"
+                    "Tombol 💰 TOPUP SALDO.</blockquote>")
                 kb = InlineKeyboardMarkup([[B("💰 TOPUP SALDO","isi_saldo",style="success")],[B("🔙 Kembali","menu|main",style="danger")]])
                 await u.message.reply_text(msg_saldo,reply_markup=kb,parse_mode="HTML"); return
             c.user_data["created_in_session"] = True
@@ -2032,16 +2095,16 @@ async def msg(u,c):
         sk = data.get("server_key","sg_1ip")
         if es == "username":
             if not is_username_taken(t):
-                await u.message.reply_text("🚫 Akun tidak ditemukan !!")
+                await u.message.reply_text("🚫 Akun tidak ditemukan.")
                 await u.message.reply_text("👤 Masukkan username akun :")
                 return
             a = get_acc(t)
             if not a or a.get("user_id") != uid:
-                await u.message.reply_text("🚫 Bukan akun Anda !!")
+                await u.message.reply_text("🚫 Bukan akun Anda.")
                 await u.message.reply_text("👤 Masukkan username akun :")
                 return
             if a.get("is_trial"):
-                await u.message.reply_text("🚫 Akun trial tidak bisa diperpanjang !!")
+                await u.message.reply_text("🚫 Akun trial tidak bisa diperpanjang.")
                 await u.message.reply_text("👤 Masukkan username akun :")
                 return
             data["username"] = t; c.user_data["extend_data"] = data; c.user_data["extend_step"] = "password"
@@ -2050,11 +2113,15 @@ async def msg(u,c):
         if es == "password":
             a = get_acc(data.get("username"))
             if not a or a.get("password") != t:
-                await u.message.reply_text("🚫 Password salah !!")
+                await u.message.reply_text("🚫 Password salah.")
                 await u.message.reply_text("🔑 Masukkan password akun :")
                 return
             c.user_data["extend_step"] = "durasi"
-            await u.message.reply_text("📆 Masukkan masa aktif tambahan 1-30 (hari) :")
+            try:
+                ed = datetime.strptime(a["exp"],"%Y-%m-%d").date()
+                sisa = max(0,(ed-datetime.now().date()).days)
+            except: sisa = 0
+            await u.message.reply_text(f"📆 Masukkan masa aktif tambahan 1-30 (hari) :\nSisa masa aktif: {sisa} hari")
             return
         if es == "durasi":
             valid = t.isdigit() and (HARI_MIN <= int(t) <= HARI_MAX)
