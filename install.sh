@@ -2404,32 +2404,36 @@ show_banner(){
     drp=$(systemctl is-active dropbear 2>/dev/null); hap=$(systemctl is-active haproxy 2>/dev/null)
     sshc=$(get_ssh_count); vmc=$(get_xray_count vmess); vlc=$(get_xray_count vless); trc=$(get_xray_count trojan)
     total=$((sshc+vmc+vlc+trc)); onl=$(get_online)
+
     echo ""
-    printf "           ${WH}sansxml${N}  ${GY}◆${N}  ${WH}VPS${N}  ${GY}◆${N}  ${WH}%s${N}\n" "$now"
-    printf "${PU}╭─[${PK} SERVER ${PU}]───────────────────────────────────────────────────╮${N}\n"
-    printf " ${GY}OS${N}        ${PK}›${N} ${WH}%s${N}\n" "$os"
-    printf " ${GY}KERNEL${N}    ${PK}›${N} ${WH}%s${N}\n" "$kernel"
-    printf " ${GY}CPU${N}       ${PK}›${N} ${WH}%s vCPU${N}      ${GY}load${N} ${WH}%s${N}\n" "$cpu" "$load"
-    printf " ${GY}RAM${N}       ${PK}›${N} ${WH}%s${N}  ${WH}%s${N}\n" "$(bar "$ram")  ${ram}%" "$(get_ram_h)"
-    printf " ${GY}DISK${N}      ${PK}›${N} ${WH}%s${N}  ${WH}%s${N}\n" "$(bar "$disk")  ${disk}%" "$(get_disk_h)"
-    printf " ${GY}UPTIME${N}    ${PK}›${N} ${WH}%s${N}\n" "$up"
-    printf " ${GY}TIME${N}      ${PK}›${N} ${WH}%s${N}\n" "$now"
-    printf "${PU}├─[${PK} NETWORK ${PU}]──────────────────────────────────────────────────┤${N}\n"
-    printf " ${GY}IP${N}        ${PK}›${N} ${WH}%s${N}\n" "$ip"
-    printf " ${GY}STATUS${N}    ${PK}›${N} ${GR}● ONLINE${N}\n"
-    printf " ${GY}BANDWIDTH${N} ${PK}›${N} ${WH}0 / 3000 GB${N}\n"
-    printf "${PU}├─[${PK} TRAFFIC ${PU}]──────────────────────────────────────────────────┤${N}\n"
-    printf " ${GY}TODAY${N}     ${PK}›${N} ${WH}%s${N}\n" "$(get_traffic_pair d)"
-    printf " ${GY}MONTH${N}     ${PK}›${N} ${WH}%s${N}\n" "$(get_traffic_pair m)"
-    printf " ${GY}SPEED${N}     ${PK}›${N} ${WH}%s${N}  ${GY}%s${N}\n" "$(get_speed)" "$(date '+%B' | tr '[:upper:]' '[:lower:]')"
-    printf "${PU}├─[${PK} SERVICES ${PU}]─────────────────────────────────────────────────┤${N}\n"
-    printf " ${WH}%b BOT${N}   ${WH}%b SSH-WS${N}   ${WH}%b SSL${N}   ${WH}%b UDP${N}\n" \
+    printf "        ${WH}sansxml${N}  ${GY}◆${N}  ${WH}VPS${N}\n"
+    printf "        ${GY}%s${N}\n\n" "$now"
+
+    printf "${PU}╭─ ${PK}SERVER${PU} ─────────────────────────────────────────────────────╮${N}\n"
+    printf " ${GY}OS${N}       ${WH}%s${N}   ${GY}CPU${N} ${WH}%s vCPU${N}\n" "$os" "$cpu"
+    printf " ${GY}KERNEL${N}   ${WH}%s${N}   ${GY}LOAD${N} ${WH}%s${N}\n" "$kernel" "$load"
+    printf " ${GY}RAM${N}      ${WH}%s  %s${N}   ${GY}DISK${N} ${WH}%s  %s${N}\n" "$(bar "$ram")" "${ram}%" "$(bar "$disk")" "${disk}%"
+    printf " ${GY}UPTIME${N}   ${WH}%s${N}   ${GY}STATUS${N} ${GR}● ONLINE${N}\n" "$up"
+    printf " ${GY}IP${N}       ${WH}%s${N}\n" "$ip"
+    printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
+
+    printf "${PU}╭─ ${PK}TRAFFIC${PU} ────────────────────────────────────────────────────╮${N}\n"
+    printf " ${GY}TODAY${N}    ${WH}%s${N}\n" "$(get_traffic_pair d)"
+    printf " ${GY}MONTH${N}    ${WH}%s${N}\n" "$(get_traffic_pair m)"
+    printf " ${GY}SPEED${N}    ${WH}%s${N}   ${GY}%s${N}\n" "$(get_speed)" "$(date '+%B' | tr '[:upper:]' '[:lower:]')"
+    printf " ${GY}LIMIT${N}    ${WH}0 / 3000 GB${N}\n"
+    printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
+
+    printf "${PU}╭─ ${PK}SERVICES${PU} ───────────────────────────────────────────────────╮${N}\n"
+    printf " ${WH}%b BOT${N}       ${WH}%b SSH-WS${N}    ${WH}%b SSL${N}      ${WH}%b UDP${N}\n" \
       "$(status_dot "$bot")" "$(status_dot "$ws")" "$(status_dot "$ssl")" "$(status_dot "$udp")"
-    printf " ${WH}%b XRAY${N}   ${WH}%b NGIX${N}   ${WH}%b DROPBEAR${N}   ${WH}%b HAPROXY${N}\n" \
+    printf " ${WH}%b XRAY${N}     ${WH}%b NGIX${N}      ${WH}%b DROPBEAR${N}  ${WH}%b HAPROXY${N}\n" \
       "$(status_dot "$xry")" "$(status_dot "$ngx")" "$(status_dot "$drp")" "$(status_dot "$hap")"
-    printf "${PU}├─[${PK} ACCOUNTS ${PU}]─────────────────────────────────────────────────┤${N}\n"
-    printf " ${GY}SSH OVPN${N} ${WH}%s${N}   ${GY}VMESS${N} ${WH}%s${N}   ${GY}VLESS${N} ${WH}%s${N}   ${GY}TROJAN${N} ${WH}%s${N}   ${GY}TOTAL${N} ${WH}%s${N}\n" "$sshc" "$vmc" "$vlc" "$trc" "$total"
-    printf " ${GY}LIVE${N}      ${PK}›${N} ${GR}OK${N}  ${WH}online ${GR}%s${N}  ${GY}ram${N} ${WH}%s%%${N}  ${GY}cpu${N} ${WH}%s%%${N}\n" "$onl" "$ram" "$(get_cpu_pct)"
+    printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
+
+    printf "${PU}╭─ ${PK}ACCOUNTS${PU} ───────────────────────────────────────────────────╮${N}\n"
+    printf " ${GY}SSH/OVPN${N} ${WH}%s${N}   ${GY}VMESS${N} ${WH}%s${N}   ${GY}VLESS${N} ${WH}%s${N}   ${GY}TROJAN${N} ${WH}%s${N}   ${GY}TOTAL${N} ${WH}%s${N}\n" "$sshc" "$vmc" "$vlc" "$trc" "$total"
+    printf " ${GY}LIVE${N}     ${GR}● OK${N}   ${GY}ONLINE${N} ${WH}%s${N}   ${GY}RAM${N} ${WH}%s%%${N}   ${GY}CPU${N} ${WH}%s%%${N}\n" "$onl" "$ram" "$(get_cpu_pct)"
     printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n"
 }
 
@@ -2495,12 +2499,12 @@ get_cpu_pct(){
 }
 show_menu(){ clear
     show_banner
-    printf "${PU}├─[${PK} MENU ${PU}]─────────────────────────────────────────────────────┤${N}\n"
-    printf " ${YE}[01]${N} ${WH}AUTO STOP BOT${N}        ${YE}[03]${N} ${WH}BANDWIDTH${N}\n"
-    printf " ${YE}[02]${GR} VPS INFORMATION${N}      ${YE}[04]${N} ${WH}SERVICE STATUS${N}\n"
-    printf " ${YE}[05]${N} ${WH}ADD TOKEN BOT${N}         ${YE}[06]${N} ${WH}EXIT${N}\n"
+    printf "\n${PU}╭─ ${PK}MENU${PU} ───────────────────────────────────────────────────────╮${N}\n"
+    printf " ${YE}01${N}  ${WH}AUTO STOP BOT${N}          ${YE}04${N}  ${WH}SERVICE STATUS${N}\n"
+    printf " ${GR}02${N}  ${GR}VPS INFORMATION${N}        ${YE}05${N}  ${WH}ADD TOKEN BOT${N}\n"
+    printf " ${YE}03${N}  ${WH}BANDWIDTH${N}              ${YE}06${N}  ${WH}EXIT${N}\n"
     printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
-    echo -ne "${PK}◆${N} ${PU2}Select${N} ${CY}[1-6]${N} ${PK}›${N} "
+    echo -ne "${CY}◆${N} ${GY}Select${N} ${WH}[1-6]${N} ${CY}›${N} "
 }
 show_vps_info(){ clear; show_banner; box_top "VPS INFORMATION"
     kv "OS" "$(grep PRETTY_NAME /etc/os-release|cut -d= -f2|tr -d '"')"
@@ -2555,40 +2559,36 @@ json.dump(d,open(f,'w'),indent=2,ensure_ascii=False)
     if [ "$st" = "active" ]; then kvc "Result" "✓ TOKEN DIPERBARUI" "${GR}"
     else kvc "Result" "✗ GAGAL" "${RE}"; fi
     box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read; }
-stop_bot_clean(){ clear; show_banner; box_top "STOP BOT & CLEAN CACHE"
-    box_row "${YE}Bot akan dimatikan & cache dibersihkan${N}"
-    box_mid "AKAN DILAKUKAN"
-    box_row "Stop service vpnbot"
-    box_row "Clean apt cache & journal"
-    box_row "Clean /tmp, /var/tmp, log lama"
-    box_row "Drop page cache RAM"
-    box_bot; echo ""
-    echo -ne "${PK}◆${N} Ketik ${GR}${WH}YES${N} untuk konfirmasi: "
+stop_bot_clean(){ clear
+    printf "${PU}╭─ ${PK}REMOVE SANSXML SC${PU} ────────────────────────────────────────╮${N}\n"
+    printf " ${WH}Fungsi ini akan mencopot SC dari VPS.${N}\n"
+    printf " ${GY}• Stop & hapus service Telegram Bot${N}\n"
+    printf " ${GY}• Hapus menu SANSXML dan auto-menu SSH${N}\n"
+    printf " ${GY}• Hapus file konfigurasi dan source bot${N}\n"
+    printf " ${GY}• VPN core seperti XRAY/SSH/SSL tetap dipertahankan${N}\n"
+    printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
+    echo -ne "${PK}◆${N} Ketik ${GR}YES${N} untuk mencopot SC: "
     read c
-    [ "$c" != "YES" ] && { echo -e "  ${GR}Dibatalkan${N}"; sleep 1; return; }
+    [ "$c" != "YES" ] && { echo -e "  ${GY}Dibatalkan${N}"; sleep 1; return; }
+
     echo ""
-    echo -e "  ${PU2}[1/5]${N} Stop bot..."; systemctl stop vpnbot 2>/dev/null; sleep 1
-    echo -e "        ${GR}✓ Bot dihentikan${N}"
-    echo -e "  ${PU2}[2/5]${N} Clean apt cache..."; apt-get clean >/dev/null 2>&1
-    rm -rf /var/cache/apt/archives/*.deb /var/lib/apt/lists/* 2>/dev/null
-    echo -e "        ${GR}✓ Apt cache${N}"
-    echo -e "  ${PU2}[3/5]${N} Clean journal..."; journalctl --rotate >/dev/null 2>&1; journalctl --vacuum-time=1s >/dev/null 2>&1
-    echo -e "        ${GR}✓ Journal${N}"
-    echo -e "  ${PU2}[4/5]${N} Clean temp & log..."; rm -rf /tmp/* /var/tmp/* /root/.cache/* 2>/dev/null
-    find /var/log -type f \( -name "*.gz" -o -name "*.old" -o -name "*.log.*" \) -delete 2>/dev/null
-    truncate -s 0 /var/log/syslog /var/log/auth.log 2>/dev/null
-    echo -e "        ${GR}✓ Temp & log${N}"
-    echo -e "  ${PU2}[5/5]${N} Drop RAM cache..."; sync; echo 3 > /proc/sys/vm/drop_caches 2>/dev/null
-    echo -e "        ${GR}✓ RAM cache${N}"
-    echo ""
-    box_top "STATUS AKHIR"
-    kvc "Bot Telegram" "STOPPED" "${RE}"
-    kvc "Disk" "$(df -h / | tail -1 | awk '{print $3}') ($(df -h / | tail -1 | awk '{print $5}'))" "${GR}"
-    kvc "RAM" "$(free -h | awk '/^Mem:/{print $3"/"$2}')" "${GR}"
-    kvc "Result" "VPS BERSIH" "${GR}"
-    box_bot; echo ""
-    echo -e "  ${YE}Start bot:${N} ${PK}systemctl start vpnbot${N}"; echo ""
-    echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read; }
+    systemctl stop vpnbot 2>/dev/null || true
+    systemctl disable vpnbot 2>/dev/null || true
+    rm -f /etc/systemd/system/vpnbot.service
+    systemctl daemon-reload 2>/dev/null || true
+
+    rm -f /root/bot.py /root/vpnbot.py /root/vpnbot_config.json /root/vpnbot_accounts.json
+    rm -f /usr/local/bin/sansxml-menu
+    rm -f /etc/profile.d/sansxml-menu.sh
+    rm -f /etc/systemd/system/vpnbot.service
+    rm -rf /root/sansxml-bot /root/SANSXML-VPN-BOT
+
+    clear
+    printf "\n  ${GR}✓ SC SANSXML berhasil dicopot dari VPS.${N}\n"
+    printf "  ${GY}VPN core tetap berjalan seperti biasa.${N}\n\n"
+    exit 0
+}
+
 while true; do
     show_menu
     read choice
