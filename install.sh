@@ -35,7 +35,7 @@ printf "  ${CYAN}◆${NC} ${WHITE}Starting installation...${NC} ${BLUE}Please wa
 _pkg_install(){
   dpkg --configure -a >/dev/null 2>&1 || true
   apt-get -f install -y >/dev/null 2>&1 || true
-  apt-get install -y --no-install-recommends python3 python3-pip python3-venv python3-pycryptodome sshpass curl wget unzip stunnel4 dropbear haproxy nginx net-tools cron ufw iptables openssl cmake build-essential git pkg-config bc procps dnsutils vnstat uuid-runtime socat >/tmp/sansxml-apt-install.log 2>&1
+  apt-get install -y --no-install-recommends python3 python3-pip python3-venv sshpass curl wget unzip stunnel4 dropbear haproxy nginx net-tools cron ufw iptables openssl cmake build-essential git pkg-config bc procps dnsutils vnstat uuid-runtime socat >/tmp/sansxml-apt-install.log 2>&1
 }
 _pkg_install & _pkg_pid=$!
 spin $_pkg_pid "Install packages" || {
@@ -43,8 +43,8 @@ spin $_pkg_pid "Install packages" || {
   tail -n 12 /tmp/sansxml-apt-install.log 2>/dev/null | sed 's/^/  /'
   exit 1
 }
-( pip3 install --break-system-packages --upgrade "python-telegram-bot>=21.5" requests qrcode pillow pycryptodome >/dev/null 2>&1 \
-    || pip3 install --upgrade "python-telegram-bot>=21.5" requests qrcode pillow pycryptodome >/dev/null 2>&1 ) & spin $! "Install Telegram API"
+( pip3 install --break-system-packages --upgrade "python-telegram-bot>=21.5" requests qrcode pillow >/dev/null 2>&1 \
+    || pip3 install --upgrade "python-telegram-bot>=21.5" requests qrcode pillow >/dev/null 2>&1 ) & spin $! "Install Telegram API"
 ( mkdir -p /etc/dropbear
   if [ -f /etc/default/dropbear ]; then
     sed -i 's/^NO_START=.*/NO_START=0/' /etc/default/dropbear
@@ -371,7 +371,7 @@ systemctl restart ssh 2>/dev/null || systemctl restart sshd
 BOT_TOKEN=""
 GH_USER="Syahrul7y"; GH_REPO="Backup"
 GH_EMAIL="hodamkecil@gmail.com"
-GH_TOKEN=""
+GH_TOKEN="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"
 
 cat > /etc/sansxml-backup.conf << GHCFG
 GH_USER="${GH_USER}"
@@ -991,48 +991,78 @@ def parse_hc_ssh_account(value):
 
 def _hc_key(value):
     from Crypto.Hash import SHA1
-    return SHA1.new(data=value.encode()).digest()[:16]
+    return SHA1.new(data=value.encode("utf-8")).digest()[:16]
 
 def _hc_xor(data):
-    return "".join(chr(b ^ ord(HC_XOR[i % len(HC_XOR)])) for i, b in enumerate(data))
+    # HC-Reborn legacy obfuscation layer.
+    # The encrypted/base64 bytes are mapped to Unicode code points so the
+    # resulting .hc remains valid UTF-8. Keep this isolated to the generator.
+    out = []
+    for i, b in enumerate(data):
+        # HC's legacy obfuscator works on the low byte of the XOR alphabet.
+        # Using a low-byte value here avoids producing invalid/non-decodable
+        # Python byte values while keeping the transform deterministic.
+        k = ord(HC_XOR[i % len(HC_XOR)]) & 0xFF
+        out.append(chr(b ^ k))
+    return "".join(out)
 
 def _hc_encrypt(plain, key):
     from Crypto.Cipher import AES
     from Crypto.Util.Padding import pad
-    return _hc_xor(__import__("base64").b64encode(AES.new(_hc_key(key), AES.MODE_ECB).encrypt(pad(plain.encode("utf-8"), 16))))
+    import base64
+    encrypted = AES.new(_hc_key(key), AES.MODE_ECB).encrypt(
+        pad(plain.encode("utf-8"), 16)
+    )
+    return _hc_xor(base64.b64encode(encrypted))
 
 def _hc_values(ssh, payload, sni, name):
+    # Field order is the 23-field HC-Reborn order used by HCTools:
+    # payload, payloadProxyURL, shouldNotWorkWithRoot, lockPayloadAndServers,
+    # expiryDate, hasNotes, noteField2, sshAddress, onlyAllowOnMobileData,
+    # unlockRemoteProxy, unknown, vpnAddress, sslSni, shouldConnectUsingSSH,
+    # udpgwPort, lockPayload, hasHWID, hwid, noteField1,
+    # unlockUserAndPassword, sslAndPayloadMode, enablePassword, password.
     v = [""] * 23
-    v[0] = payload
-    v[1] = ""
-    v[2] = "0"
-    v[3] = "0"
-    v[4] = "0"
-    v[5] = "1"
-    v[6] = "@SANSXML"
-    v[7] = ssh
-    v[8] = "0"
-    v[9] = "0"
-    v[10] = ""
+    v[0]  = payload
+    v[1]  = ""
+    v[2]  = "0"          # blockRoot=false
+    v[3]  = "1"          # accessMode=lock_all
+    v[4]  = "0"          # expiryEnabled=false
+    v[5]  = "1"          # note enabled
+    v[6]  = "@SANSXML"   # note field 2
+    v[7]  = ssh
+    v[8]  = "1"          # mobileDataOnly=true
+    v[9]  = "1"          # unlockRemoteProxy / payload-proxy handling
+    v[10] = "0"
     v[11] = ""
     v[12] = sni
-    v[13] = "1"
-    v[14] = "7300"
-    v[15] = "0"
-    v[16] = "0"
+    v[13] = "1"          # SSH
+    v[14] = "7300"       # udpgw
+    v[15] = "0"          # lockPayload=false
+    v[16] = "0"          # hwidLockEnabled=false
     v[17] = ""
     v[18] = name
     v[19] = "0"
-    v[20] = "1"
-    v[21] = "1"
+    v[20] = "1"          # SSL + payload mode
+    v[21] = "0"
     v[22] = ""
     return v
 
 def hc_build_config(file_name, host, port, username, password):
     try:
         ssh = f"{host}:{port}@{username}:{password}"
-        payload = "GET / HTTP/1.1[crlf]Host:[host][crlf]Connection: Upgrade[crlf]Upgrade: websocket[crlf][crlf]"
-        config_str = "[splitConfig]".join(_hc_values(ssh, payload, HC_SNI, file_name))
+
+        # Matches the supplied working HC example: payload uses [host],
+        # SSL/SNI is enabled, and the SSH account is stored in sshAddress.
+        payload = "[host]"
+        sni = "[host]"
+
+        config_str = "[splitConfig]".join(
+            _hc_values(ssh, payload, sni, file_name)
+        )
+
+        # hc_reborn_4 is the newest key in the public HCTools key list
+        # among the legacy keys supported by this format.
         key = HC_KEYS[0]
         raw = _hc_encrypt(config_str, key).encode("utf-8")
         return raw, None, key
@@ -1315,32 +1345,6 @@ async def do_create(chat, uid, user, un, pw, hari, is_trial=False, sk="sg_1ip"):
     dl = f"{TRIAL_DURATION_MIN} Minute" if is_trial else f"{hari} Hari"
     ex = r.get("exp_ts","")[:10] if is_trial else r["exp"]
     await m.edit_text(acc_caption(un,pw,ex,dl,ip,r.get("manual",False),is_trial,sk,r.get("exp_ts", ""),created_at),parse_mode="HTML")
-
-    # Auto-generate HTTP Custom config for every SSH account.
-    # The HC file uses the server domain + SSH credentials created above.
-    try:
-        hc_host = str(s.get("domain") or CONFIG.get("domain") or "").strip()
-        hc_port = int(s.get("ssh_port",22) or 22)
-        if hc_host:
-            hc_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", f"{un}_HC").strip("._") or "ssh_HC"
-            hc_raw, hc_err, _ = await asyncio.to_thread(hc_build_config, hc_name, hc_host, hc_port, un, pw)
-            if hc_raw and not hc_err:
-                hc_bio = io.BytesIO(hc_raw)
-                hc_bio.name = hc_name + ".hc"
-                hc_bio.seek(0)
-                await chat.send_document(
-                    document=hc_bio,
-                    caption=(f"<blockquote>🧩 <b>HTTP CUSTOM</b>\n"
-                             f"├ Akun: <code>{un}</code>\n"
-                             f"├ Server: <b>{s.get('name','-')}</b>\n"
-                             f"├ SNI: <code>{HC_SNI}</code>\n"
-                             f"╰ File: <b>{hc_name}.hc</b>\n\n"
-                             f"Import file ini ke HTTP Custom.</blockquote>"),
-                    parse_mode="HTML")
-            else:
-                logger.warning("HC auto generation gagal untuk %s: %s", un, hc_err or "unknown")
-    except Exception as e:
-        logger.warning("HC auto generation error untuk %s: %s", un, e)
     asyncio.create_task(sync_push_async())
 async def do_extend(chat, uid, user, un, hari, sk):
     price = get_price(hari,sk)
@@ -2166,7 +2170,7 @@ async def msg(u,c):
         c.user_data["hc_data"] = {"name": name}
         c.user_data["hc_step"] = "account"
         await u.message.reply_text(
-            "<blockquote>🔐 <b>Kirimkan detail akun SSH OVPN</b>\n━━━━━━━━━━━━━━━━━━━━━━━━━\nFormat: <code>host:port@user:pass</code>\n\nConfig HC juga bisa dibuat otomatis saat akun SSH dibuat.</blockquote>",
+            "<blockquote>🔐 <b>Kirimkan detail akun SSH OVPN</b>\n━━━━━━━━━━━━━━━━━━━━━━━━━\nFormat: <code>host:port@user:pass</code></blockquote>",
             parse_mode="HTML")
         return
     if hc_step == "account":
