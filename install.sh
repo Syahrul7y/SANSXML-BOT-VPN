@@ -263,7 +263,7 @@ EOF
   [ -f /usr/bin/badvpn-udpgw ] && systemctl enable udpgw >/dev/null 2>&1 && systemctl restart udpgw
   sleep 2 ) & spin $! "Start VPN services"
 
-DOMAIN="sgivip.naaofficial.web.id"
+DOMAIN="id-sansvpnstore.cloud"
 
 # 4. VPN CORE
 echo ""
@@ -407,7 +407,7 @@ GH_EMAIL="${GH_EMAIL}"
 GHCFG
 chmod 600 /etc/sansxml-backup.conf
 
-DOMAIN="sgivip.naaofficial.web.id"
+DOMAIN="id-sansvpnstore.cloud"
 ADMIN_ID="6144358600"
 
 cat > /root/vpnbot_config.json << CFGEOF
@@ -416,8 +416,10 @@ cat > /root/vpnbot_config.json << CFGEOF
   "domain": "${DOMAIN}",
   "owner_ids": [${ADMIN_ID}],
   "servers": {
-    "sg_1ip": {"name": "🇸🇬 PRIME SG-01", "city": "Singapore", "isp": "DigitalOcean LLC", "ssh_ovpn": "DIGITALOCEAN • PRIME SG-01", "domain": "${DOMAIN}", "price_day": 117, "price_month": 3510, "ip_limit": 1, "slot_max": 50, "quota_gb": 700},
-    "sg_2ip": {"name": "🇸🇬 PRIME SG-02", "city": "Singapore", "isp": "DigitalOcean LLC", "ssh_ovpn": "DIGITALOCEAN • PRIME SG-02", "domain": "${DOMAIN}", "price_day": 167, "price_month": 5010, "ip_limit": 2, "slot_max": 50, "quota_gb": 800}
+    "id_rmhweb_01": {"name": "🇮🇩 ID-RMHWEB-01", "city": "", "isp": "", "ssh_ovpn": "ID-RMHWEB-01", "domain": "${DOMAIN}", "price_day": 117, "price_month": 3510, "ip_limit": 1, "slot_max": 100, "quota_gb": 700},
+    "id_rmhweb_02": {"name": "🇮🇩 ID-RMHWEB-02", "city": "", "isp": "", "ssh_ovpn": "ID-RMHWEB-02", "domain": "${DOMAIN}", "price_day": 167, "price_month": 5010, "ip_limit": 2, "slot_max": 100, "quota_gb": 800},
+    "id_rmhweb_03": {"name": "🇮🇩 ID-RMHWEB-03", "city": "", "isp": "", "ssh_ovpn": "ID-RMHWEB-03", "domain": "${DOMAIN}", "price_day": 167, "price_month": 5010, "ip_limit": 1, "slot_max": 100, "quota_gb": 800},
+    "id_rmhweb_04": {"name": "🇮🇩 ID-RMHWEB-04", "city": "", "isp": "", "ssh_ovpn": "ID-RMHWEB-04", "domain": "${DOMAIN}", "price_day": 167, "price_month": 5010, "ip_limit": 2, "slot_max": 100, "quota_gb": 800}
   },
   "ip_limit": 2,
   "block_hours": 2
@@ -670,7 +672,7 @@ def xray_build_trojan_grpc(host, pwd, svc, remark):
     return f"trojan://{pwd}@{host}:{XRAY_PORTS['trojan_grpc']}?{p}#{remark}"
 
 # SSH
-def ssh_create(u, p, days, is_trial=False, key="sg_1ip"):
+def ssh_create(u, p, days, is_trial=False, key="id_rmhweb_01"):
     now = datetime.now()
     if is_trial:
         exp_date = now.date(); exp_ts = (now + timedelta(minutes=TRIAL_DURATION_MIN)).strftime("%Y-%m-%d %H:%M:%S")
@@ -685,13 +687,13 @@ def ssh_create(u, p, days, is_trial=False, key="sg_1ip"):
            f"passwd -u {u} 2>&1 ; usermod -U {u} 2>&1 ; echo DONE:$?")
     c,o,e = ssh_run(cmd, key)
     return {"ok":True,"username":u,"password":p,"exp":exp,"exp_ts":exp_ts,"manual":("DONE:0" not in o)}
-def ssh_extend(u, ne, key="sg_1ip"):
+def ssh_extend(u, ne, key="id_rmhweb_01"):
     c,o,e = ssh_run(f"chage -E '{ne}' {u} 2>&1 ; echo DONE:$?", key)
     return "DONE:0" in o
-def ssh_delete(u, key="sg_1ip"):
+def ssh_delete(u, key="id_rmhweb_01"):
     ssh_run(f"pkill -9 -u {u} 2>/dev/null; userdel -r {u} 2>&1; echo OK", key, timeout=20)
     return True
-def ssh_test(key="sg_1ip"):
+def ssh_test(key="id_rmhweb_01"):
     c,o,e = ssh_run("echo PING_OK", key, timeout=10)
     return ("PING_OK" in o, "SSH OK" if "PING_OK" in o else f"SSH gagal: {e or o}")
 
@@ -700,13 +702,13 @@ def valid_password(s):
     if not s or len(s)<5 or len(s)>32: return False
     return all(c in "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*_.-" for c in s)
 
-def get_active_sessions(u, key="sg_1ip"):
+def get_active_sessions(u, key="id_rmhweb_01"):
     try:
         c,o,_ = ssh_run("who", key, timeout=5)
         if c != 0: return []
         return [l for l in o.splitlines() if l.split() and l.split()[0] == u]
     except: return []
-def count_live_shells(u, key="sg_1ip"):
+def count_live_shells(u, key="id_rmhweb_01"):
     try:
         c,o,_ = ssh_run(f"ps -u {u} -o comm=", key, timeout=5)
         if c != 0: return 0
@@ -714,13 +716,13 @@ def count_live_shells(u, key="sg_1ip"):
         sh = ("bash","sh","zsh","ksh","dash","csh","tcsh")
         return sum(1 for p in procs if p.lstrip("-") in sh)
     except: return 0
-def check_second(u, key="sg_1ip"):
+def check_second(u, key="id_rmhweb_01"):
     sess = get_active_sessions(u, key); n = len(sess)
     if n<=1: return False,sess,n
     sh = count_live_shells(u, key)
     if sh>1: return True,sess,sh
     return False,sess,sh if sh>0 else n
-def block_user(u, h=2, key="sg_1ip"):
+def block_user(u, h=2, key="id_rmhweb_01"):
     try:
         ssh_run(f"passwd -l {u}", key, timeout=10)
         ssh_run(f"pkill -9 -u {u}", key, timeout=10)
@@ -729,7 +731,7 @@ def block_user(u, h=2, key="sg_1ip"):
                 "unblock_at":(datetime.now()+timedelta(hours=h)).strftime("%Y-%m-%d %H:%M:%S")}
         save_json(BLOCK_FILE, d); return True
     except: return False
-def unblock_user(u, key="sg_1ip"):
+def unblock_user(u, key="id_rmhweb_01"):
     try:
         ssh_run(f"passwd -u {u}", key, timeout=10)
         d = load_json(BLOCK_FILE,{})
@@ -911,7 +913,7 @@ def restore_ssh_users():
         if (exp-today).days<0: s += 1; continue
         pw = a.get("password","")
         if not pw: s += 1; continue
-        sk = a.get("server_key","sg_1ip")
+        sk = a.get("server_key","id_rmhweb_01")
         pw_b64 = base64.b64encode(pw.encode()).decode()
         cmd = (f"userdel -r {un} 2>/dev/null; useradd -m -s /bin/bash {un} 2>&1 ; "
                f"chage -E '{a['exp']}' {un} 2>&1 ; chage -M 99999 {un} 2>&1 ; chage -I -1 {un} 2>&1 ; "
@@ -990,7 +992,7 @@ def reset_backup(keep=True):
 def kb_dash(uid):
     rows = [[B("➕  BUAT AKUN","buat_akun",style="primary"),B("⌛  TRIAL AKUN","trial_akun",style="primary")],
         [B("🔄 PERPANJANG AKUN","perpanjang_akun",style="primary")],
-        [B("🏦 SALDO","isi_saldo",style="primary"),B("📁 AKUN SAYA","my_accs",style="primary")],
+        [B("💰 TOPUP SALDO","isi_saldo",style="primary"),B("📁 AKUN SAYA","my_accs",style="primary")],
         [B("♻️ REFRESH","refresh",style="primary")]]
     rows.append([B("⚙️ PENGATURAN","admin|menu",style="danger")])
     return InlineKeyboardMarkup(rows)
@@ -1003,7 +1005,7 @@ def kb_saldo():
         [B("🔙 Kembali","menu|main",style="danger")]])
 def kb_layanan():
     return InlineKeyboardMarkup([
-        [B("➕ SSH OVPN","pilih|ssh",style="primary")],
+        [B("➕ SSH","pilih|ssh",style="primary")],
         [B("➕ VMESS","pilih|vmess",style="primary"),B("➕ VLESS","pilih|vless",style="primary")],
         [B("➕ TROJAN","pilih|trojan",style="primary")],
         [B("🔙 KEMBALI","menu|main",style="danger")]])
@@ -1076,17 +1078,20 @@ def dash_text(user, uid):
               f"╰ Kuota Trial     : <b>{trial_left(uid)}x Hari</b>","","───────────────────────","</blockquote>"]
     return "\n".join(lines)
 def pilih_layanan_text():
-    return "<blockquote>\n💻 <b>PILIH LAYANAN VPN</b>\n───────────────────────\nSilakan pilih protokol:\n───────────────────────\n</blockquote>"
+    return "<blockquote>\n🌐 <b>PILIH LAYANAN VPN</b>\n───────────────────────\n<b>Silakan pilih protocol akun yang ingin di buat</b>\n───────────────────────\n</blockquote>"
 def ssh_server_text():
     a = get_active_servers()
     if not a: return "<blockquote>⚠️ <b>Belum ada server</b></blockquote>"
-    lines = ["<blockquote>","<b>💻 SSH OVPN</b>","─────────────────────────",""]
-    for k,s in a.items():
-        used,mx = get_slot_info(k); cek = "✅" if max(0,mx-used)>0 else "❌"
-        lines += [f"◆ {s['name']}",f"├ Harga Harian   : <b>{rupiah(s.get('price_day',0))}</b>",
-                  f"├ Harga Bulanan  : <b>{rupiah(s.get('price_month',0))}</b>",
-                  f"├ Qouta          : <b>{s.get('quota_gb',700)} GB</b>",f"├ Limit IP       : {s.get('ip_limit',1)} IP",
-                  f"╰ Slot Tersedia  : <b>{used}/{mx} {cek}</b>","",""]
+    lines = ["<blockquote>","<b>🌐 DAFTAR SERVER SSH</b>","─────────────────────────","",
+             "<b>Silakan pilih server yang ingin di buat</b>",""]
+    for i,(k,s) in enumerate(a.items(),1):
+        used,mx = get_slot_info(k)
+        status = "🟢 Tersedia" if used < mx else "🔴 Penuh"
+        lines += [f"<b>[{i}]</b>",f"◆ {s.get('name','-')}",
+                  f"├ Harga Harian  : <b>{rupiah(s.get('price_day',0))}</b>",
+                  f"├ Harga Bulanan : <b>{rupiah(s.get('price_month',0))}</b>",
+                  f"├ Limit IP      : {s.get('ip_limit',1)} IP",
+                  f"╰ Slot Tersedia : <b>{used}/{mx} {status}</b>",""]
     lines += ["─────────────────────────","</blockquote>"]
     return "\n".join(lines)
 def xray_server_text(proto):
@@ -1108,7 +1113,7 @@ def saldo_text(uid, nom=""):
             f"Minimal topup {rupiah(MIN_TOPUP)}\n\n"
             f"❖ <i>Saldo dapat digunakan untuk membuat akun VPN</i> ❖\n</blockquote>")
 
-def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="sg_1ip", exp_ts="", created_at=""):
+def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="id_rmhweb_01", exp_ts="", created_at=""):
     srv = SERVERS.get(server_key, {})
     head = "TRIAL" if is_trial else ("MANUAL" if manual else "PREMIUM")
     BULAN = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"]
@@ -1126,7 +1131,7 @@ def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="sg_
                 exp_fmt = f"{et.day} {BULAN[et.month-1]}, {et.year} {et:%H:%M}"
             except: pass
     except: exp_fmt = exp; created_fmt = "-"
-    ssh_ovpn_val = srv.get("ssh_ovpn") or srv.get("name","SG NEWMEDIA")
+    ssh_ovpn_val = srv.get("ssh_ovpn") or srv.get("name","ID-RMHWEB-01")
     host = srv.get("domain") or SSH_HOST
     quota = srv.get("quota_gb", 700) or 700
     payload_ws = "GET /cdn-cgi/trace HTTP/1.1[crlf]Host: [host][crlf][crlf]GET-RAY / HTTP/1.1[crlf]Host: [host][crlf]Connection: Upgrade[crlf]User-Agent: [ua][crlf]Upgrade: websocket[crlf][crlf]"
@@ -1134,12 +1139,12 @@ def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="sg_
     esc = lambda x: str(x).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
     L = [
         f"┌────────────────────────",
-        f"│   <b>♨️ SSH OVPN ACCOUNT {head} ♨️</b>",
+        f"│   <b>♨️ SSH ACCOUNT {head} ♨️</b>",
         f"└────────────────────────", "",
         f"┌────────────────────────",
-        f"│ <b>City</b>       : {esc(srv.get('city','Singapore'))}",
-        f"│ <b>ISP</b>        : {esc(srv.get('isp','DigitalOcean LLC'))}",
-        f"│ <b>SSH OVPN</b>   : {esc(ssh_ovpn_val)}",
+        f"│ <b>City</b>       : {esc(srv.get('city',''))}",
+        f"│ <b>ISP</b>        : {esc(srv.get('isp',''))}",
+        f"│ <b>SSH</b>        : {esc(ssh_ovpn_val)}",
         f"│ <b>Username</b>   : {esc(u)}",
         f"│ <b>Password</b>   : {esc(p)}",
         f"│ <b>Qouta</b>      : {quota} GB",
@@ -1175,8 +1180,8 @@ def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="sg_
 def xray_caption(proto, un, pw, cred, exp, days, sk, is_trial=False, exp_ts="", created_at=""):
     s = SERVERS.get(sk,{})
     host = s.get("domain") or SSH_HOST
-    city = s.get("city","Singapore"); isp = s.get("isp","DigitalOcean LLC")
-    ssh_ovpn = s.get("ssh_ovpn") or s.get("name","SG NEWMEDIA")
+    city = s.get("city",""); isp = s.get("isp","")
+    ssh_ovpn = s.get("ssh_ovpn") or s.get("name","ID-RMHWEB-01")
     quota = s.get("quota_gb",700) or 700
     ip_limit = s.get("ip_limit",1) or 1
     BULAN = ["Jan","Feb","Mar","Apr","Mei","Jun","Jul","Agu","Sep","Okt","Nov","Des"]
@@ -1217,7 +1222,7 @@ def xray_caption(proto, un, pw, cred, exp, days, sk, is_trial=False, exp_ts="", 
         server_lines = [f"│ <b>Host</b>       : {esc(host)}", f"│ <b>Trojan TCP</b> : {XRAY_PORTS['trojan_tcp']}", f"│ <b>Trojan WS</b>  : {XRAY_PORTS['trojan_ws']} /trojan", f"│ <b>Trojan gRPC</b>: {XRAY_PORTS['trojan_grpc']} trojan-grpc"]
     password_line = f"│ <b>Password</b>   : {esc(cred if proto == 'trojan' else pw)}"
     account_lines = [
-        f"│ <b>City</b>       : {esc(city)}", f"│ <b>ISP</b>        : {esc(isp)}", f"│ <b>SSH OVPN</b>   : {esc(ssh_ovpn)}",
+        f"│ <b>City</b>       : {esc(city)}", f"│ <b>ISP</b>        : {esc(isp)}", f"│ <b>SSH</b>   : {esc(ssh_ovpn)}",
         f"│ <b>Username</b>   : {esc(un)}", password_line
     ]
     if proto != "trojan": account_lines.append(f"│ <b>UUID</b>       : {esc(cred)}")
@@ -1231,7 +1236,7 @@ def xray_caption(proto, un, pw, cred, exp, days, sk, is_trial=False, exp_ts="", 
     return "\n".join(L)
 
 # ACTIONS
-async def do_create(chat, uid, user, un, pw, hari, is_trial=False, sk="sg_1ip"):
+async def do_create(chat, uid, user, un, pw, hari, is_trial=False, sk="id_rmhweb_01"):
     s = SERVERS.get(sk,{}); ip = int(s.get("ip_limit",2) or 2)
     price = 0 if is_trial else get_price(hari,sk)
     if not is_trial and get_bal(uid) < price:
@@ -1241,8 +1246,8 @@ async def do_create(chat, uid, user, un, pw, hari, is_trial=False, sk="sg_1ip"):
             f"💵 Harga Akun : <b>{rupiah(price)}</b>\n"
             f"📉 Kurang     : <b>{rupiah(kurang)}</b>\n\n"
             "Silakan topup saldo melalui menu\n"
-            "Tombol 🏦 SALDO.</blockquote>")
-        kb = InlineKeyboardMarkup([[B("🏦 SALDO","isi_saldo",style="success")],[B("🔙 Kembali","menu|main",style="danger")]])
+            "Tombol 💰 TOPUP SALDO.</blockquote>")
+        kb = InlineKeyboardMarkup([[B("💰 TOPUP SALDO","isi_saldo",style="success")],[B("🔙 Kembali","menu|main",style="danger")]])
         await chat.send_message(msg_saldo,reply_markup=kb,parse_mode="HTML"); return
     hdr = "TRIAL" if is_trial else "PREMIUM"
     srv_num = list(SERVERS.keys()).index(sk) + 1 if sk in SERVERS else 1
@@ -1255,7 +1260,7 @@ async def do_create(chat, uid, user, un, pw, hari, is_trial=False, sk="sg_1ip"):
     save_acc(un,{"user_id":uid,"username":un,"password":pw,"exp":r["exp"],"exp_ts":r.get("exp_ts",""),
         "days":hari,"limit_ip":ip,"harga":price,"created_at":created_at,
         "first_name":user.first_name or "","username_tg":user.username or "","manual":r.get("manual",False),
-        "free_owner":is_owner(uid),"is_trial":is_trial,"server_key":sk,"server":s.get("name","SG NEWMEDIA"),
+        "free_owner":is_owner(uid),"is_trial":is_trial,"server_key":sk,"server":s.get("name","ID-RMHWEB-01"),
         "proto":"ssh"})
     if not is_trial:
         add_trx(uid,user.first_name or "User",user.username or "","buat_akun",price,f"{hari}h {s.get('name','')}")
@@ -1272,8 +1277,8 @@ async def do_extend(chat, uid, user, un, hari, sk):
             f"💵 Harga Akun : <b>{rupiah(price)}</b>\n"
             f"📉 Kurang     : <b>{rupiah(kurang)}</b>\n\n"
             "Silakan topup saldo melalui menu\n"
-            "Tombol 🏦 SALDO.</blockquote>")
-        kb = InlineKeyboardMarkup([[B("🏦 SALDO","isi_saldo",style="success")],[B("🔙 Kembali","menu|main",style="danger")]])
+            "Tombol 💰 TOPUP SALDO.</blockquote>")
+        kb = InlineKeyboardMarkup([[B("💰 TOPUP SALDO","isi_saldo",style="success")],[B("🔙 Kembali","menu|main",style="danger")]])
         await chat.send_message(msg_saldo,reply_markup=kb,parse_mode="HTML"); return
     m = await chat.send_message(f"⚙️ Memperpanjang akun {un} selama {hari} hari...", parse_mode="HTML")
     a = get_acc(un)
@@ -1300,8 +1305,8 @@ async def do_create_xray(chat, uid, user, un, pw, hari, sk, proto, is_trial=Fals
             f"💵 Harga Akun : <b>{rupiah(price)}</b>\n"
             f"📉 Kurang     : <b>{rupiah(kurang)}</b>\n\n"
             "Silakan topup saldo melalui menu\n"
-            "Tombol 🏦 SALDO.</blockquote>")
-        kb = InlineKeyboardMarkup([[B("🏦 SALDO","isi_saldo",style="success")],[B("🔙 Kembali","menu|main",style="danger")]])
+            "Tombol 💰 TOPUP SALDO.</blockquote>")
+        kb = InlineKeyboardMarkup([[B("💰 TOPUP SALDO","isi_saldo",style="success")],[B("🔙 Kembali","menu|main",style="danger")]])
         await chat.send_message(msg_saldo,reply_markup=kb,parse_mode="HTML"); return
     hdr = 'TRIAL' if is_trial else 'PREMIUM'
     srv_num = list(SERVERS.keys()).index(sk) + 1 if sk in SERVERS else 1
@@ -1344,7 +1349,7 @@ async def _del_acc(uid, un, user, chat):
             try: await asyncio.to_thread(xray_del_user,proto,cred)
             except: pass
     else:
-        try: await asyncio.to_thread(ssh_delete,un,a.get("server_key","sg_1ip"))
+        try: await asyncio.to_thread(ssh_delete,un,a.get("server_key","id_rmhweb_01"))
         except: pass
     delete_acc_json(un)
     if ref > 0:
@@ -1370,7 +1375,7 @@ async def auto_cleanup():
                         if (today - datetime.strptime(a["exp"],"%Y-%m-%d").date()).days >= 1: ex = True
                     except: pass
                 if ex:
-                    proto = a.get("proto","ssh"); sk = a.get("server_key","sg_1ip")
+                    proto = a.get("proto","ssh"); sk = a.get("server_key","id_rmhweb_01")
                     if proto in ("vmess","vless","trojan"):
                         cred = a.get("uuid") if proto != "trojan" else a.get("password")
                         if cred:
@@ -1389,7 +1394,7 @@ async def auto_cleanup():
             for un,a in accs.items():
                 if a.get("proto") != "ssh": continue
                 if a.get("is_trial") or a.get("free_owner") or un in blk: continue
-                sk = a.get("server_key","sg_1ip")
+                sk = a.get("server_key","id_rmhweb_01")
                 v,_,cnt = await asyncio.to_thread(check_second,un,sk)
                 if v:
                     try: await asyncio.to_thread(block_user,un,BLOCK_HOURS,sk)
@@ -1398,7 +1403,7 @@ async def auto_cleanup():
             for un,info in list(blk.items()):
                 try:
                     if now >= datetime.strptime(info["unblock_at"],"%Y-%m-%d %H:%M:%S"):
-                        sk = (get_acc(un) or {}).get("server_key","sg_1ip")
+                        sk = (get_acc(un) or {}).get("server_key","id_rmhweb_01")
                         await asyncio.to_thread(unblock_user,un,sk); chg = True
                 except: pass
         except Exception as e: logger.error(f"cleanup: {e}")
@@ -1638,7 +1643,7 @@ async def cb(u,c):
         qgs = f"{qg} GB" if qg else "❌"; pds = rupiah(pd) if pd else "❌"
         pms = rupiah(pm) if pm else "❌"; ips = f"{ip} IP" if ip else "❌"
         sms = f"{sm}" if sm else "❌"; doms = dom if dom else "❌"
-        cty = s.get("city","-") or "-"; isp_v = s.get("isp","-") or "-"
+        cty = s.get("city","") or ""; isp_v = s.get("isp","") or ""
         warn = "\n⚠️ <b>Lengkapi dulu</b>\n" if not comp else "\n✅ <i>Aktif</i>\n"
         txt = (f"<blockquote><b>{s.get('name','-')}</b>\n───────────────────────\n\n"
             f"├ City          : <b>{cty}</b>\n├ ISP           : <b>{isp_v}</b>\n"
@@ -1671,7 +1676,7 @@ async def cb(u,c):
               "quota_gb":f"Kirim quota GB baru untuk <b>{sname}</b>\nContoh: <code>700</code>",
               "ip_limit":f"Kirim limit IP baru untuk <b>{sname}</b>\nContoh: <code>2</code>",
               "slot_max":f"Kirim jumlah slot server baru untuk <b>{sname}</b>\nContoh: <code>50</code>",
-              "domain":f"Kirim DOMAIN baru untuk <b>{sname}</b>\nContoh: <code>sgivip.naaofficial.web.id</code>"}
+              "domain":f"Kirim DOMAIN baru untuk <b>{sname}</b>\nContoh: <code>id-sansvpnstore.cloud</code>"}
         try: await q.edit_message_text(pr.get(f,"Kirim:"),reply_markup=InlineKeyboardMarkup([[B("❌ Batal",f"srv_edit|{k}",style="danger")]]),parse_mode="HTML")
         except: pass
         return
@@ -1985,7 +1990,7 @@ async def cb(u,c):
         if proto == "ssh":
             dl = f"{TRIAL_DURATION_MIN} Minute" if a.get("is_trial") else f"{a.get('days',30)} Hari"
             ref = 0 if (a.get("is_trial") or int(a.get("harga",0))<=0) else hitung_refund(a)
-            cap = acc_caption(a.get("username",un),a['password'],a['exp'],dl,a.get('limit_ip',1),a.get('manual',False),a.get('is_trial',False),a.get('server_key','sg_1ip'))
+            cap = acc_caption(a.get("username",un),a['password'],a['exp'],dl,a.get('limit_ip',1),a.get('manual',False),a.get('is_trial',False),a.get('server_key','id_rmhweb_01'))
             b = get_block_info(a.get("username",un))
             if b:
                 try:
@@ -1998,7 +2003,7 @@ async def cb(u,c):
         else:
             xcred = a.get("uuid") or a.get("password","")
             xun = a.get("username",un)
-            xsk = a.get('server_key','sg_1ip')
+            xsk = a.get('server_key','id_rmhweb_01')
             ref = 0 if a.get("is_trial") else hitung_refund(a)
             cap = xray_caption(proto,xun,a.get("password",""),xcred,a['exp'],a.get('days',30),xsk,a.get('is_trial',False))
             if ref > 0: cap += f"\n\n💰 <b>Refund: {rupiah(ref)}</b>"
@@ -2117,7 +2122,7 @@ async def msg(u,c):
             try: await notify.delete()
             except: pass
             SERVERS[kn] = {"name":nama,"ssh_host":ip,"ssh_port":port,"ssh_user":"root",
-                "ssh_key":SSH_KEY_PATH,"city":"-","isp":"-","ssh_ovpn":nama,
+                "ssh_key":SSH_KEY_PATH,"city":"","isp":"","ssh_ovpn":nama,
                 "domain":None,"price_day":None,"price_month":None,
                 "ip_limit":None,"slot_max":None,"quota_gb":None}
             save_servers()
@@ -2138,7 +2143,7 @@ async def msg(u,c):
                     [B("❌ Batal","admin|srv",style="danger")]]),parse_mode="HTML")
             return
         SERVERS[kn] = {"name":nama,"ssh_host":ip,"ssh_port":port,"ssh_user":"root",
-            "ssh_key":kf,"city":"-","isp":"-","ssh_ovpn":nama,
+            "ssh_key":kf,"city":"","isp":"","ssh_ovpn":nama,
             "domain":None,"price_day":None,"price_month":None,
             "ip_limit":None,"slot_max":None,"quota_gb":None}
         save_servers()
@@ -2231,7 +2236,7 @@ async def msg(u,c):
                 return
             hari = int(t)
             un = data.get("username"); pw = data.get("password")
-            sk = data.get("server_key","sg_1ip"); proto = data.get("proto","ssh")
+            sk = data.get("server_key","id_rmhweb_01"); proto = data.get("proto","ssh")
             price = get_price(hari,sk)
             c.user_data["buat_step"] = None; c.user_data["buat_data"] = {}
             if not is_backup_ready():
@@ -2243,8 +2248,8 @@ async def msg(u,c):
                     f"💵 Harga Akun : <b>{rupiah(price)}</b>\n"
                     f"📉 Kurang     : <b>{rupiah(kurang)}</b>\n\n"
                     "Silakan topup saldo melalui menu\n"
-                    "Tombol 🏦 SALDO.</blockquote>")
-                kb = InlineKeyboardMarkup([[B("🏦 SALDO","isi_saldo",style="success")],[B("🔙 Kembali","menu|main",style="danger")]])
+                    "Tombol 💰 TOPUP SALDO.</blockquote>")
+                kb = InlineKeyboardMarkup([[B("💰 TOPUP SALDO","isi_saldo",style="success")],[B("🔙 Kembali","menu|main",style="danger")]])
                 await u.message.reply_text(msg_saldo,reply_markup=kb,parse_mode="HTML"); return
             c.user_data["created_in_session"] = True
             if proto == "ssh":
@@ -2256,7 +2261,7 @@ async def msg(u,c):
     es = c.user_data.get("extend_step")
     if es:
         data = c.user_data.get("extend_data",{})
-        sk = data.get("server_key","sg_1ip")
+        sk = data.get("server_key","id_rmhweb_01")
         if es == "username":
             if not is_username_taken(t):
                 await u.message.reply_text("🚫 Akun tidak ditemukan.")
@@ -2307,7 +2312,7 @@ async def post_init(app):
     try: await app.bot.set_my_commands([BotCommand("start","⌂ Menu")])
     except: pass
     asyncio.create_task(auto_cleanup())
-    ok,msg = await asyncio.to_thread(ssh_test,"sg_1ip")
+    ok,msg = await asyncio.to_thread(ssh_test,"id_rmhweb_01")
     logger.info(f"[STARTUP] {msg}")
     if is_backup_ready():
         try:
