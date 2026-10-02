@@ -425,9 +425,6 @@ def save_config(c):
 
 CONFIG = load_config()
 BOT_TOKEN = CONFIG["bot_token"]
-HC_SNI = "ssl-listen.noice.id"
-HC_XOR = ["。","〃","〄","々","〆","〇","〈","〉","《","》","「","」","『","』","〖","〗","〒","〓","〔","〕"]
-HC_KEYS = ["hc_reborn_4", "hc_reborn___7", "hc_reborn_7", "hc_reborn_tester_5"]
 ADMIN_IDS = [6144358600]
 SSH_HOST = CONFIG["domain"]
 SERVERS = CONFIG.get("servers", {})
@@ -955,123 +952,9 @@ def reset_backup(keep=True):
     except Exception as e: return False,{"error":str(e)[:200]}
 
 # KEYBOARDS
-def kb_buat_config():
-    return InlineKeyboardMarkup([
-        [B("➕ HTTP CUSTOM", "hc_http_custom", style="primary")],
-        [B("🔙 KEMBALI", "menu|main", style="danger")]
-    ])
-def kb_hc_protocol():
-    # Protokol lain sengaja belum ditampilkan.
-    return InlineKeyboardMarkup([
-        [B("➕ SSH OVPN", "hc_ssh", style="primary")],
-        [B("🔙 Kembali", "buat_config", style="danger")]
-    ])
-def kb_hc_ssh():
-    return InlineKeyboardMarkup([
-        [B("AXIS WA V1", "hc_axis_v1", style="primary")],
-        [B("🔙 kembali", "hc_http_custom", style="danger")]
-    ])
-
-def hc_buat_config_text():
-    return "<blockquote>🧩 <b>MENU BUAT CONFIG</b>\n──────────────────────\nPilih untuk config aplikasi VPN:</blockquote>"
-def hc_generator_text():
-    return "<blockquote>🌐 <b>HTTP Custom Generator</b>\n━━━━━━━━━━━━━━━━━━━━\nPilih protokol yang ingin digunakan:</blockquote>"
-def hc_ssh_text():
-    return "<blockquote>🌐 <b>SSH OVPN</b>\n━━━━━━━━━━━━━━━━━━━━\nPilih config yang ingin digunakan:</blockquote>"
-
-def parse_hc_ssh_account(value):
-    m = re.match(r"^([^:@\s]+):(\d+)@([^:\s]+):(.+)$", value.strip())
-    if not m:
-        return None
-    host, port, user, password = m.groups()
-    port = int(port)
-    if not (1 <= port <= 65535) or not user or not password:
-        return None
-    return host, port, user, password
-
-def _hc_key(value):
-    from Crypto.Hash import SHA1
-    return SHA1.new(data=value.encode("utf-8")).digest()[:16]
-
-def _hc_xor(data):
-    # HC-Reborn legacy obfuscation layer.
-    # The encrypted/base64 bytes are mapped to Unicode code points so the
-    # resulting .hc remains valid UTF-8. Keep this isolated to the generator.
-    out = []
-    for i, b in enumerate(data):
-        # HC's legacy obfuscator works on the low byte of the XOR alphabet.
-        # Using a low-byte value here avoids producing invalid/non-decodable
-        # Python byte values while keeping the transform deterministic.
-        k = ord(HC_XOR[i % len(HC_XOR)]) & 0xFF
-        out.append(chr(b ^ k))
-    return "".join(out)
-
-def _hc_encrypt(plain, key):
-    from Crypto.Cipher import AES
-    from Crypto.Util.Padding import pad
-    import base64
-    encrypted = AES.new(_hc_key(key), AES.MODE_ECB).encrypt(
-        pad(plain.encode("utf-8"), 16)
-    )
-    return _hc_xor(base64.b64encode(encrypted))
-
-def _hc_values(ssh, payload, sni, name):
-    # Field order is the 23-field HC-Reborn order used by HCTools:
-    # payload, payloadProxyURL, shouldNotWorkWithRoot, lockPayloadAndServers,
-    # expiryDate, hasNotes, noteField2, sshAddress, onlyAllowOnMobileData,
-    # unlockRemoteProxy, unknown, vpnAddress, sslSni, shouldConnectUsingSSH,
-    # udpgwPort, lockPayload, hasHWID, hwid, noteField1,
-    # unlockUserAndPassword, sslAndPayloadMode, enablePassword, password.
-    v = [""] * 23
-    v[0]  = payload
-    v[1]  = ""
-    v[2]  = "0"          # blockRoot=false
-    v[3]  = "1"          # accessMode=lock_all
-    v[4]  = "0"          # expiryEnabled=false
-    v[5]  = "1"          # note enabled
-    v[6]  = "@SANSXML"   # note field 2
-    v[7]  = ssh
-    v[8]  = "1"          # mobileDataOnly=true
-    v[9]  = "1"          # unlockRemoteProxy / payload-proxy handling
-    v[10] = "0"
-    v[11] = ""
-    v[12] = sni
-    v[13] = "1"          # SSH
-    v[14] = "7300"       # udpgw
-    v[15] = "0"          # lockPayload=false
-    v[16] = "0"          # hwidLockEnabled=false
-    v[17] = ""
-    v[18] = name
-    v[19] = "0"
-    v[20] = "1"          # SSL + payload mode
-    v[21] = "0"
-    v[22] = ""
-    return v
-
-def hc_build_config(file_name, host, port, username, password):
-    try:
-        ssh = f"{host}:{port}@{username}:{password}"
-
-        # Matches the supplied working HC example: payload uses [host],
-        # SSL/SNI is enabled, and the SSH account is stored in sshAddress.
-        payload = "[host]"
-        sni = "[host]"
-
-        config_str = "[splitConfig]".join(
-            _hc_values(ssh, payload, sni, file_name)
-        )
-
-        # hc_reborn_4 is the newest key in the public HCTools key list
-        # among the legacy keys supported by this format.
-        key = HC_KEYS[0]
-        raw = _hc_encrypt(config_str, key).encode("utf-8")
-        return raw, None, key
-    except Exception as e:
-        return None, str(e)[:300], None
 
 def kb_dash(uid):
     rows = [[B("➕  BUAT AKUN","buat_akun",style="primary"),B("⌛  TRIAL AKUN","trial_akun",style="primary")],
-        [B("🧩 BUAT CONFIG","buat_config",style="primary")],
         [B("🔄 PERPANJANG AKUN","perpanjang_akun",style="primary")],
         [B("🏦 SALDO","isi_saldo",style="primary"),B("📁 AKUN SAYA","my_accs",style="primary")],
         [B("♻️ REFRESH","refresh",style="primary")]]
@@ -1537,27 +1420,6 @@ async def cb(u,c):
         except: pass
         asyncio.create_task(sync_push_async()); return
 
-    if d == "buat_config":
-        c.user_data.clear()
-        try: await q.edit_message_text(hc_buat_config_text(), reply_markup=kb_buat_config(), parse_mode="HTML")
-        except: pass
-        return
-    if d == "hc_http_custom":
-        try: await q.edit_message_text(hc_generator_text(), reply_markup=kb_hc_protocol(), parse_mode="HTML")
-        except: pass
-        return
-    if d == "hc_ssh":
-        try: await q.edit_message_text(hc_ssh_text(), reply_markup=kb_hc_ssh(), parse_mode="HTML")
-        except: pass
-        return
-    if d == "hc_axis_v1":
-        c.user_data["hc_step"] = "filename"
-        c.user_data["hc_data"] = {}
-        try: await q.edit_message_text(
-            "<blockquote>🌐 <b>KETIK NAMA FILE CONFIG</b>\n━━━━━━━━━━━━━━━━━━━━━━\nContoh: <code>axis wa</code>, dll.\n\nKetik /batal untuk membatalkan</blockquote>",
-            parse_mode="HTML")
-        except: pass
-        return
     if d == "buat_akun":
         if not is_backup_ready():
             await q.answer("⚠️ Backup belum di-setup.",show_alert=True); return
@@ -2153,51 +2015,6 @@ async def msg(u,c):
     uid = u.effective_user.id
     track_user(u.effective_user)
     t = (u.message.text or "").strip()
-
-    if t.lower() == "/batal" and c.user_data.get("hc_step"):
-        c.user_data.pop("hc_step", None); c.user_data.pop("hc_data", None)
-        await u.message.reply_text("❌ Pembuatan config dibatalkan.", reply_markup=kb_dash(uid), parse_mode="HTML")
-        return
-
-    hc_step = c.user_data.get("hc_step")
-    if hc_step == "filename":
-        if not re.match(r"^[A-Za-z0-9 _.-]{1,60}$", t):
-            await u.message.reply_text("❌ Nama file tidak valid.\nContoh: <code>axis wa</code>", parse_mode="HTML")
-            return
-        name = t.strip()
-        if name.lower().endswith(".hc"):
-            name = name[:-3].rstrip()
-        c.user_data["hc_data"] = {"name": name}
-        c.user_data["hc_step"] = "account"
-        await u.message.reply_text(
-            "<blockquote>🔐 <b>Kirimkan detail akun SSH OVPN</b>\n━━━━━━━━━━━━━━━━━━━━━━━━━\nFormat: <code>host:port@user:pass</code></blockquote>",
-            parse_mode="HTML")
-        return
-    if hc_step == "account":
-        acc = parse_hc_ssh_account(t)
-        if not acc:
-            await u.message.reply_text("❌ Format salah!\nGunakan: <code>host:port@user:pass</code>", parse_mode="HTML")
-            return
-        host, port, usern, passwd = acc
-        name = c.user_data.get("hc_data", {}).get("name", "axis")
-        safe_name = re.sub(r"[^A-Za-z0-9_.-]+", "_", name).strip("._") or "axis"
-        wait = await u.message.reply_text("⚙️ Membuat config HTTP Custom......")
-        raw, err, variant = await asyncio.to_thread(hc_build_config, safe_name, host, port, usern, passwd)
-        try: await wait.delete()
-        except: pass
-        c.user_data.pop("hc_step", None); c.user_data.pop("hc_data", None)
-        if err or not raw:
-            await u.message.reply_text(f"❌ <b>Gagal membuat config</b>\n\n{err or 'Unknown error'}", parse_mode="HTML")
-            return
-        bio = io.BytesIO(raw); bio.name = safe_name + "_hc_reborn_4.hc"; bio.seek(0)
-        caption = (f"<blockquote>✅ <b>Config berhasil dibuat</b>\n──────────────────\n"
-                   f"📁 Nama: <b>{safe_name}</b>\n"
-                   f"🌐 Protocol: <b>SSH OVPN</b>\n"
-                   f"🧩 Import file config ke aplikasi HTTP Custom\n\n"
-                   f"🛍️ <b>SANSXML VPN STORE</b>\n\n"
-                   f"✨ Terimakasih telah menggunakan layanan kami ✨</blockquote>")
-        await u.message.reply_document(document=bio, caption=caption, parse_mode="HTML")
-        return
 
     bf = c.user_data.get("backup_field")
     if bf and is_owner(uid):
