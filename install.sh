@@ -431,8 +431,16 @@ echo -e "  ${CYAN}▸${NC} ${WHITE}Install Bot.py${NC}"
 
 cat > /root/bot.py << 'BOTPYEOF'
 #!/usr/bin/env python3
-import re, io, json, os, logging, subprocess, asyncio, base64, random, string, socket, shutil, time, uuid
+import re, io, json, os, logging, subprocess, asyncio, base64, random, string, socket, shutil, time, uuid, functools
 from datetime import datetime, timedelta
+
+# Python 3.8 compatibility: asyncio.to_thread() was added in Python 3.9.
+# The bot uses it in several async handlers, so provide a compatible fallback.
+if not hasattr(asyncio, "to_thread"):
+    async def _to_thread(func, /, *args, **kwargs):
+        loop = asyncio.get_running_loop()
+        return await loop.run_in_executor(None, functools.partial(func, *args, **kwargs))
+    asyncio.to_thread = _to_thread
 from telegram import Update, InlineKeyboardButton, InlineKeyboardMarkup, BotCommand, ReplyKeyboardRemove
 from telegram.ext import Application, CommandHandler, CallbackQueryHandler, MessageHandler, filters
 
