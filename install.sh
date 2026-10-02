@@ -41,6 +41,15 @@ case "$(uname -m)" in x86_64|amd64|aarch64|arm64) ;; *) echo -e "  ${RED}ARSITEK
 echo -e "  ${CYAN}OS${NC}       : ${PRETTY_NAME:-$ID}"
 echo -e "  ${CYAN}VERSION${NC}  : ${VERSION_ID:-unknown}"
 echo -e "  ${CYAN}ARCH${NC}     : $(uname -m)"
+# Track packages that were not installed before SANSXML, so EXIT can remove only what this installer added.
+SC_PKG_FILE=/etc/sansxml-packages.list
+SC_PKGS="python3 python3-pip python3-venv sshpass curl wget unzip stunnel4 dropbear haproxy nginx net-tools cron ufw iptables openssl cmake build-essential git pkg-config bc procps dnsutils vnstat uuid-runtime socat certbot"
+: > "$SC_PKG_FILE"
+for _p in $SC_PKGS; do
+  dpkg-query -W -f='${Status}' "$_p" 2>/dev/null | grep -q 'install ok installed' || echo "$_p" >> "$SC_PKG_FILE"
+done
+chmod 600 "$SC_PKG_FILE"
+
 _pkg_install(){
   dpkg --configure -a >/dev/null 2>&1 || true
   apt-get -f install -y >/dev/null 2>&1 || true
@@ -354,6 +363,11 @@ XRAYSVC
 ( systemctl daemon-reload; systemctl enable ws-ssh ws-ssh-alt stunnel4 >/dev/null 2>&1; systemctl restart ws-ssh ws-ssh-alt stunnel4 ) & spin $! "Start SSH/SSL services"
 
 # 5. BANNER
+# Backup files that this installer modifies so EXIT can restore them.
+mkdir -p /etc/sansxml-original
+[ -f /etc/issue.net ] && cp -n /etc/issue.net /etc/sansxml-original/issue.net 2>/dev/null || true
+[ -f /etc/motd ] && cp -n /etc/motd /etc/sansxml-original/motd 2>/dev/null || true
+[ -f /etc/ssh/sshd_config ] && cp -n /etc/ssh/sshd_config /etc/sansxml-original/sshd_config 2>/dev/null || true
 rm -rf /etc/update-motd.d/* 2>/dev/null
 cat > /etc/issue.net << 'BANEOF'
 <br><font color="#ff00aa"><b>                        ▬▬▬▬▬▬ஜ۩۞۩ஜ▬▬▬▬▬▬</b></font><br><font color="#ffffff"><b>                         --- 卐 </b></font><font color="#ffff00"><b>SANSXML VPN STORE</b></font><font color="#ffffff"><b> 卐 ---</b></font><br><font color="#ff00aa"><b>                        ▬▬▬▬▬▬ஜ۩۞۩ஜ▬▬▬▬▬▬</b></font><br><font color="#ffffff"><b>                              卍 TERM OF SERVICE 卐</b></font><br><font color="#ffffff"><b>                                  PREMIUM VPN</b></font><br><font color="#ffffff"><b>                                NO MULTI LOGIN !!</b></font><br><font color="#ffffff"><b>                           NO HACKING AND CARDING</b></font><br><font color="#ffff00"><b>                              👉 MULTI LOGIN BANNED 👈</b></font><br><font color="#ff00aa"><b>                        ▬▬▬▬▬▬ஜ۩۞۩ஜ▬▬▬▬▬▬</b></font><br><font color="#ffffff"><b>                   ORDER CONFIG PREMIUM: </b></font><font color="#00ff44"><b>wa.me/6289527419748</b></font><br><font color="#ffffff"><b>                         BOT ORDER VPN: </b></font><font color="#00ff44"><b>t.me/unokwn</b></font><br><br>
@@ -383,12 +397,12 @@ systemctl restart ssh 2>/dev/null || systemctl restart sshd
 BOT_TOKEN=""
 GH_USER="Syahrul7y"; GH_REPO="Backup"
 GH_EMAIL="hodamkecil@gmail.com"
-GH_TOKEN="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"
+GH_TOKEN=""
 
 cat > /etc/sansxml-backup.conf << GHCFG
 GH_USER="${GH_USER}"
 GH_REPO="${GH_REPO}"
-GH_TOKEN="${GH_TOKEN}"
+GH_TOKEN=""
 GH_EMAIL="${GH_EMAIL}"
 GHCFG
 chmod 600 /etc/sansxml-backup.conf
@@ -2519,8 +2533,8 @@ show_menu(){ clear
     show_banner
     printf "\n${PU}╭─ ${PK}MENU${PU} ───────────────────────────────────────────────────────╮${N}\n"
     printf " ${CY}[1]${N}  ${WH}AUTO STOP BOT${N}          ${CY}[4]${N}  ${WH}SERVICE STATUS${N}\n"
-    printf " ${CY}[2]${N}  ${WH}VPS INFORMATION${N}        ${CY}[5]${N}  ${WH}ADD TOKEN BOT${N}\n"
-    printf " ${CY}[3]${N}  ${WH}BANDWIDTH${N}              ${CY}[6]${N}  ${WH}EXIT${N}\n"
+    printf " ${CY}[2]${N}  ${WH}VPS INFORMATION${N}        ${CY}[5]${N}  ${WH}JALANKAN BOT${N}\n"
+    printf " ${CY}[3]${N}  ${WH}BANDWIDTH${N}              ${CY}[6]${N}  ${WH}EXIT / BERSIHKAN SC${N}\n"
     printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
     echo -ne "${PU2}✦${N} ${CY}Select${N} ${WH}[1-6]${N} ${PU2}›${N} "
 }
@@ -2554,59 +2568,151 @@ show_services(){ clear; show_banner; box_top "SERVICE STATUS"
         else printf " ${RE}●${N} ${WH}%-24s${N} ${WH}%s${N}\n" "$l" "$st"; fi
     done
     box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read; }
-change_token(){ clear; show_banner; box_top "UBAH TOKEN BOT"
-    local curr=$(python3 -c "import json
-try: print(json.load(open('/root/vpnbot_config.json')).get('bot_token','-'))
-except: print('-')" 2>/dev/null)
-    local masked="${curr:0:10}***${curr: -5}"
-    kv "Current" "$masked"; box_bot; echo ""
-    echo -ne "${PK}◆${N} ${PU2}Token Baru${N} ${PU}›${N} "
-    read nt
+run_bot(){ clear; show_banner; box_top "JALANKAN BOT"
+    local token="$(python3 -c "import json; print(json.load(open('/root/vpnbot_config.json')).get('bot_token',''))" 2>/dev/null)"
+    if [ -n "$token" ]; then
+        local masked="${token:0:10}***${token: -5}"
+        kv "Token Tersimpan" "$masked"
+    else
+        kv "Token" "Belum diisi"
+    fi
+    box_bot; echo ""
+    echo -ne "${PK}◆${N} ${PU2}Masukkan Token Bot Telegram${N} ${PU}›${N} "
+    IFS= read -r nt
+    nt="${nt//$'\r'/}"
     [ -z "$nt" ] && { echo -e "${RE}  Dibatalkan${N}"; sleep 1; return; }
-    python3 -c "
-import json
+
+    echo -e "\n  ${PU2}Memeriksa token...${N}"
+    if ! python3 - "$nt" <<'PYTOKEN'
+import sys, requests
+x=sys.argv[1].strip()
+if len(x) < 20 or ':' not in x:
+    raise SystemExit(1)
+r=requests.get(f"https://api.telegram.org/bot{x}/getMe",timeout=10)
+r.raise_for_status()
+j=r.json()
+if not j.get("ok"):
+    raise SystemExit(1)
+print(j["result"].get("username", ""))
+PYTOKEN
+    then
+        echo -e "  ${RE}✗ TOKEN TIDAK VALID / API TELEGRAM TIDAK DAPAT DIAKSES${N}"
+        echo -e "  ${GY}Token tidak disimpan. Periksa token dari @BotFather.${N}"
+        box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read; return
+    fi
+
+    if ! python3 - "$nt" <<'PYWRITE'
+import json,sys,os,tempfile
 f='/root/vpnbot_config.json'
 d=json.load(open(f))
-d['bot_token']='$nt'
-json.dump(d,open(f,'w'),indent=2,ensure_ascii=False)
-" 2>/dev/null
-    echo ""; echo -e "  ${PU2}Restart bot...${N}"
-    systemctl restart vpnbot 2>/dev/null; sleep 3
-    box_top "STATUS"
-    local st=$(systemctl is-active vpnbot 2>/dev/null)
-    if [ "$st" = "active" ]; then kvc "Result" "✓ TOKEN DIPERBARUI" "${GR}"
-    else kvc "Result" "✗ GAGAL" "${RE}"; fi
+d['bot_token']=sys.argv[1].strip()
+fd,tmp=tempfile.mkstemp(prefix='vpnbot_config.',dir='/root',text=True)
+with os.fdopen(fd,'w') as h: json.dump(d,h,indent=2,ensure_ascii=False); h.write('\n')
+os.replace(tmp,f)
+os.chmod(f,0o600)
+PYWRITE
+    then
+        echo -e "  ${RE}✗ Gagal menyimpan konfigurasi.${N}"
+        box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read; return
+    fi
+
+    echo -e "  ${PU2}Menjalankan bot...${N}"
+    systemctl daemon-reload 2>/dev/null || true
+    systemctl enable vpnbot >/dev/null 2>&1 || true
+    systemctl restart vpnbot >/dev/null 2>&1 || true
+    sleep 3
+    local st="$(systemctl is-active vpnbot 2>/dev/null || true)"
+    clear; show_banner; box_top "STATUS BOT"
+    if [ "$st" = "active" ]; then
+        kvc "Result" "✓ BOT BERHASIL DIJALANKAN" "${GR}"
+        kv "Service" "vpnbot"
+    else
+        kvc "Result" "✗ BOT GAGAL BERJALAN" "${RE}"
+        echo ""
+        echo -e "  ${YE}Log terakhir:${N}"
+        journalctl -u vpnbot -n 12 --no-pager 2>/dev/null | tail -n 12
+    fi
     box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read; }
-stop_bot_clean(){ clear
-    printf "${PU}╭─ ${PK}REMOVE SANSXML SC${PU} ────────────────────────────────────────╮${N}\n"
-    printf " ${WH}Fungsi ini akan mencopot SC dari VPS.${N}\n"
-    printf " ${GY}• Stop & hapus service Telegram Bot${N}\n"
-    printf " ${GY}• Hapus menu SANSXML dan auto-menu SSH${N}\n"
-    printf " ${GY}• Hapus file konfigurasi dan source bot${N}\n"
-    printf " ${GY}• VPN core seperti XRAY/SSH/SSL tetap dipertahankan${N}\n"
+
+uninstall_sc(){ clear; show_banner
+    printf "${PU}╭─ ${PK}UNINSTALL SANSXML SC${PU} ──────────────────────────────────────╮${N}\n"
+    printf " ${WH}EXIT akan menghapus komponen yang dipasang installer ini.${N}\n"
+    printf " ${GY}• Telegram bot, menu, config, data, backup & cron${N}\n"
+    printf " ${GY}• Xray, WS-SSH, stunnel, Dropbear, HAProxy, Nginx, UDPGW${N}\n"
+    printf " ${GY}• Service systemd, script, certificate lokal & konfigurasi SC${N}\n"
+    printf " ${GY}• Konfigurasi SSH/banner yang dibuat SC dikembalikan bila ada backup${N}\n"
+    printf " ${YE}Catatan: tidak menghapus OS atau seluruh paket sistem agar VPS tetap bootable.${N}\n"
     printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
-    echo -ne "${PK}◆${N} Ketik ${GR}YES${N} untuk mencopot SC: "
-    read c
+    echo -ne "${PK}◆${N} Ketik ${RE}YES${N} untuk menghapus SC: "
+    IFS= read -r c
     [ "$c" != "YES" ] && { echo -e "  ${GY}Dibatalkan${N}"; sleep 1; return; }
 
-    echo ""
-    systemctl stop vpnbot 2>/dev/null || true
-    systemctl disable vpnbot 2>/dev/null || true
-    rm -f /etc/systemd/system/vpnbot.service
-    systemctl daemon-reload 2>/dev/null || true
+    echo -e "\n  ${PU2}Membersihkan SC...${N}"
+    local svcs=(vpnbot ws-ssh ws-ssh-alt stunnel4 udpgw xray nginx haproxy dropbear)
+    for svc in "${svcs[@]}"; do
+        systemctl stop "$svc" >/dev/null 2>&1 || true
+        systemctl disable "$svc" >/dev/null 2>&1 || true
+    done
+    systemctl daemon-reload >/dev/null 2>&1 || true
 
-    rm -f /root/bot.py /root/vpnbot.py /root/vpnbot_config.json /root/vpnbot_accounts.json
-    rm -f /usr/local/bin/sansxml-menu
-    rm -f /etc/profile.d/sansxml-menu.sh
     rm -f /etc/systemd/system/vpnbot.service
-    rm -rf /root/sansxml-bot /root/SANSXML-VPN-BOT
+
+    # Delete only SSH users previously created by this bot, based on its account database.
+    if [ -f /root/vpnbot_accounts.json ]; then
+        python3 - <<'PYUSERS'
+import json, subprocess
+try:
+    d=json.load(open('/root/vpnbot_accounts.json'))
+except Exception:
+    d={}
+for username, account in d.items():
+    if account.get('proto') in ('vmess','vless','trojan'):
+        continue
+    if not isinstance(username,str) or not username or username == 'root':
+        continue
+    subprocess.run(['pkill','-9','-u',username],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    subprocess.run(['userdel','-r',username],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+PYUSERS
+    fi
+
+    rm -f /etc/systemd/system/ws-ssh.service /etc/systemd/system/ws-ssh-alt.service
+    rm -f /etc/systemd/system/udpgw.service /etc/systemd/system/xray.service
+    rm -f /usr/local/bin/ws-ssh.py /usr/bin/badvpn-udpgw /usr/local/bin/xray /usr/bin/xray
+
+    rm -rf /etc/xray /var/lib/xray /var/log/xray /etc/stunnel
+    rm -f /etc/nginx/sites-enabled/sansxml /etc/nginx/sites-available/sansxml
+    rm -f /etc/ssh/sshd_config.d/99-vpnbot.conf
+    rm -f /usr/local/bin/sansxml-menu /etc/profile.d/sansxml-menu.sh
+    rm -f /root/bot.py /root/bot_compile.log /root/vpnbot.log
+    rm -f /root/vpnbot_config.json /root/vpnbot_users.json /root/vpnbot_balance.json
+    rm -f /root/vpnbot_accounts.json /root/vpnbot_trial.json /root/vpnbot_trx.json /root/vpnbot_blocked.json
+    rm -f /root/vpnbot_backup.sh /etc/sansxml-backup.conf
+    rm -rf /root/vpnbot_backup /root/sansxml-bot /root/SANSXML-VPN-BOT /tmp/badvpn
+    rm -f /root/.ssh/id_bot /root/.ssh/id_bot.pub
+
+    # Restore SSH/banner files if this installer created backups.
+    if [ -d /etc/sansxml-original ]; then
+        [ -f /etc/sansxml-original/issue.net ] && cp -f /etc/sansxml-original/issue.net /etc/issue.net
+        [ -f /etc/sansxml-original/motd ] && cp -f /etc/sansxml-original/motd /etc/motd
+        [ -f /etc/sansxml-original/sshd_config ] && cp -f /etc/sansxml-original/sshd_config /etc/ssh/sshd_config
+        rm -rf /etc/sansxml-original
+    fi
+    systemctl daemon-reload >/dev/null 2>&1 || true
+    systemctl restart ssh 2>/dev/null || systemctl restart sshd 2>/dev/null || true
+
+    # Remove packages that were absent before this installer ran.
+    if [ -s /etc/sansxml-packages.list ]; then
+        xargs -r apt-get purge -y < /etc/sansxml-packages.list >/dev/null 2>&1 || true
+        apt-get autoremove -y >/dev/null 2>&1 || true
+    fi
+    rm -f /etc/sansxml-packages.list
 
     clear
-    printf "\n  ${GR}✓ SC SANSXML berhasil dicopot dari VPS.${N}\n"
-    printf "  ${GY}VPN core tetap berjalan seperti biasa.${N}\n\n"
+    printf "\n  ${GR}✓ SANSXML SC BERHASIL DIHAPUS.${N}\n"
+    printf "  ${WH}VPS dikembalikan ke kondisi sebelum installer sejauh file yang dibackup.${N}\n"
+    printf "  ${GY}SSH utama tidak dihapus agar koneksi VPS tetap aman.${N}\n\n"
     exit 0
 }
-
 while true; do
     show_menu
     read choice
@@ -2615,10 +2721,8 @@ while true; do
         2|02) show_vps_info ;;
         3|03) show_bandwidth ;;
         4|04) show_services ;;
-        5|05) change_token ;;
-        6|06) clear
-              echo ""; echo -e "${GR}  ✓ Terima kasih! Bot tetap jalan.${N}"
-              echo -e "${WH}    Ketik ${PK}sansxml-menu${N}${WH} untuk buka menu lagi.${N}"; echo ""; exit 0 ;;
+        5|05) run_bot ;;
+        6|06) uninstall_sc ;;
         *) echo ""; echo -e "  ${RE}Pilihan tidak valid${N}"; sleep 1 ;;
     esac
 done
