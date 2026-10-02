@@ -29,18 +29,30 @@ printf "        ${CYAN}Premium VPN Server • Automated Installation${NC}\n"
 printf "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
 printf "  ${CYAN}◆${NC} ${WHITE}Starting installation...${NC} ${BLUE}Please wait${NC}\n\n"
 
-# 1. DEPENDENCIES
-
-( apt-get update -y >/dev/null 2>&1 ) & spin $! "Update repository"
+# 1. DEPENDENCIES — Ubuntu / Debian only
+if [ "$(id -u)" != "0" ]; then
+  echo -e "  ${RED}ERROR${NC}: Jalankan installer sebagai root."
+  exit 1
+fi
+[ -f /etc/os-release ] || { echo -e "  ${RED}ERROR${NC}: Tidak dapat mendeteksi OS.${NC}"; exit 1; }
+. /etc/os-release
+case "${ID:-}" in ubuntu|debian) ;; *) echo -e "  ${RED}OS TIDAK DIDUKUNG${NC}"; echo -e "  ${YELLOW}SC ini hanya mendukung Ubuntu dan Debian.${NC}"; exit 1;; esac
+case "$(uname -m)" in x86_64|amd64|aarch64|arm64) ;; *) echo -e "  ${RED}ARSITEKTUR TIDAK DIDUKUNG${NC}: $(uname -m)"; exit 1;; esac
+echo -e "  ${CYAN}OS${NC}       : ${PRETTY_NAME:-$ID}"
+echo -e "  ${CYAN}VERSION${NC}  : ${VERSION_ID:-unknown}"
+echo -e "  ${CYAN}ARCH${NC}     : $(uname -m)"
 _pkg_install(){
   dpkg --configure -a >/dev/null 2>&1 || true
   apt-get -f install -y >/dev/null 2>&1 || true
-  apt-get install -y --no-install-recommends python3 python3-pip python3-venv sshpass curl wget unzip stunnel4 dropbear haproxy nginx net-tools cron ufw iptables openssl cmake build-essential git pkg-config bc procps dnsutils vnstat uuid-runtime socat >/tmp/sansxml-apt-install.log 2>&1
+  echo "== apt-get update ==" > /tmp/sansxml-apt-install.log
+  if ! apt-get update -y >> /tmp/sansxml-apt-install.log 2>&1; then return 1; fi
+  echo "== apt-get install ==" >> /tmp/sansxml-apt-install.log
+  apt-get install -y --no-install-recommends python3 python3-pip python3-venv sshpass curl wget unzip stunnel4 dropbear haproxy nginx net-tools cron ufw iptables openssl cmake build-essential git pkg-config bc procps dnsutils vnstat uuid-runtime socat >> /tmp/sansxml-apt-install.log 2>&1
 }
 _pkg_install & _pkg_pid=$!
 spin $_pkg_pid "Install packages" || {
   echo -e "  ${RED}PACKAGE ERROR${NC}"
-  tail -n 12 /tmp/sansxml-apt-install.log 2>/dev/null | sed 's/^/  /'
+  tail -n 20 /tmp/sansxml-apt-install.log 2>/dev/null | sed 's/^/  /'
   exit 1
 }
 ( pip3 install --break-system-packages --upgrade "python-telegram-bot>=21.5" requests qrcode pillow >/dev/null 2>&1 \
