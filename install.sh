@@ -2339,8 +2339,9 @@ WorkingDirectory=/root
 ExecStart=/usr/bin/python3 /root/bot.py
 Restart=always
 RestartSec=5
-StandardOutput=null
-StandardError=null
+StandardOutput=append:/root/vpnbot.log
+StandardError=append:/root/vpnbot.log
+Environment=PYTHONUNBUFFERED=1
 [Install]
 WantedBy=multi-user.target
 SVCEOF
@@ -2584,16 +2585,20 @@ run_bot(){ clear; show_banner; box_top "JALANKAN BOT"
 
     echo -e "\n  ${PU2}Memeriksa token...${N}"
     if ! python3 - "$nt" <<'PYTOKEN'
-import sys, requests
+import sys, json, urllib.request, urllib.error
 x=sys.argv[1].strip()
 if len(x) < 20 or ':' not in x:
     raise SystemExit(1)
-r=requests.get(f"https://api.telegram.org/bot{x}/getMe",timeout=10)
-r.raise_for_status()
-j=r.json()
+url=f"https://api.telegram.org/bot{x}/getMe"
+req=urllib.request.Request(url, headers={"User-Agent":"SANSXML-VPN-BOT/1.0"})
+try:
+    with urllib.request.urlopen(req, timeout=10) as r:
+        j=json.loads(r.read().decode("utf-8"))
+except Exception:
+    raise SystemExit(1)
 if not j.get("ok"):
     raise SystemExit(1)
-print(j["result"].get("username", ""))
+print(j.get("result",{}).get("username", ""))
 PYTOKEN
     then
         echo -e "  ${RE}✗ TOKEN TIDAK VALID / API TELEGRAM TIDAK DAPAT DIAKSES${N}"
@@ -2616,7 +2621,15 @@ PYWRITE
         box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read; return
     fi
 
+    echo -e "  ${PU2}Memeriksa modul bot...${N}"
+    if ! python3 -c 'import telegram; print(telegram.__version__)' >/tmp/vpnbot_telegram_version 2>/tmp/vpnbot_import_error; then
+        echo -e "  ${RE}✗ Modul python-telegram-bot tidak tersedia.${N}"
+        cat /tmp/vpnbot_import_error 2>/dev/null
+        box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read; return
+    fi
     echo -e "  ${PU2}Menjalankan bot...${N}"
+    : > /root/vpnbot.log
+    chmod 600 /root/vpnbot.log
     systemctl daemon-reload 2>/dev/null || true
     systemctl enable vpnbot >/dev/null 2>&1 || true
     systemctl restart vpnbot >/dev/null 2>&1 || true
@@ -2630,7 +2643,9 @@ PYWRITE
         kvc "Result" "✗ BOT GAGAL BERJALAN" "${RE}"
         echo ""
         echo -e "  ${YE}Log terakhir:${N}"
-        journalctl -u vpnbot -n 12 --no-pager 2>/dev/null | tail -n 12
+        tail -n 20 /root/vpnbot.log 2>/dev/null || true
+        echo ""
+        systemctl --no-pager --full status vpnbot 2>/dev/null | tail -n 15 || true
     fi
     box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read; }
 
