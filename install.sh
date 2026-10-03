@@ -8,7 +8,8 @@ VERSION="2.6.0"
 LOG_FILE="/var/log/sansxml.log"
 mkdir -p "$(dirname "$LOG_FILE")"
 : > "$LOG_FILE"
-exec >>"$LOG_FILE" 2>&1
+# Jangan redirect seluruh installer ke log; proses instalasi tetap terlihat di terminal.
+# Setiap tahap juga dicatat ke LOG_FILE.
 
 get_uptime_inst(){ local s=$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 0); printf "%dd %02dh %02dm" "$((s/86400))" "$(((s%86400)/3600))" "$(((s%3600)/60))"; }
 get_ram_pct(){ local t=$(awk '/MemTotal/{print $2}' /proc/meminfo); local a=$(awk '/MemAvailable/{print $2}' /proc/meminfo); awk -v t="$t" -v a="$a" 'BEGIN{if(t>0)printf "%d",((t-a)/t)*100;else print 0}'; }
@@ -32,27 +33,34 @@ get_server_meta(){
 }
 get_server_meta
 
+# Installer berjalan seperti terminal VPS biasa: tidak ada UI/progress khusus.
+# Output command tetap tampil normal; jika gagal, installer memberi penanda error
+# dan menyimpan detail ke LOG_FILE.
 run_step(){
   local name=$1 label=$2; shift 2
-  "$@" >>"$LOG_FILE" 2>&1
-  return $?
+  "$@" 2>&1 | tee -a "$LOG_FILE"
+  local rc=${PIPESTATUS[0]}
+  if [ "$rc" -ne 0 ]; then
+    printf '\n[ERROR] %s gagal (exit %s)\n' "$label" "$rc" >&2
+    printf '[ERROR] Log: %s\n\n' "$LOG_FILE" >&2
+  fi
+  return "$rc"
 }
 
 run_step_sh(){
   local name=$1 label=$2; shift 2
-  bash -c "$*" >>"$LOG_FILE" 2>&1
-  return $?
-}
-
-spin(){
-  local pid=$1 msg=$2
-  while kill -0 "$pid" 2>/dev/null; do sleep 0.2; done
-  wait "$pid"
-  return $?
+  bash -c "$*" 2>&1 | tee -a "$LOG_FILE"
+  local rc=${PIPESTATUS[0]}
+  if [ "$rc" -ne 0 ]; then
+    printf '\n[ERROR] %s gagal (exit %s)\n' "$label" "$rc" >&2
+    printf '[ERROR] Log: %s\n\n' "$LOG_FILE" >&2
+  fi
+  return "$rc"
 }
 
 core_fail(){
-  echo "ERROR: Pemasangan Core VPN gagal. Lihat log: $LOG_FILE" >&2
+  echo "[ERROR] Pemasangan Core VPN gagal." >&2
+  echo "[ERROR] Periksa log: $LOG_FILE" >&2
   exit 1
 }
 
@@ -362,8 +370,11 @@ EOF
   systemctl restart udpgw
 ) >>"$LOG_FILE" 2>&1
 rc=$?
-finish_or_fail udpgw "$rc"
-[ "$rc" -eq 0 ] || exit 1
+if [ "$rc" -ne 0 ]; then
+  printf "\n[ERROR] Memasang UDPGW gagal (exit %s)\n" "$rc" >&2
+  printf "[ERROR] Log: %s\n\n" "$LOG_FILE" >&2
+  exit "$rc"
+fi
 run_step_sh firewall 'Mengatur firewall' 'ufw default allow incoming >/dev/null 2>&1; ufw default allow outgoing >/dev/null 2>&1; for p in 22 80 109 443 8080 8443 8444 8445 10001 10002 10003 10004 10005 10006 10007; do ufw allow $p/tcp >/dev/null 2>&1; done; ufw allow 7300/udp >/dev/null 2>&1; ufw allow 1:65535/udp >/dev/null 2>&1; ufw --force enable >/dev/null 2>&1' || exit 1
 run_step_sh services 'Menjalankan layanan VPN' 'systemctl daemon-reload; systemctl enable ws-ssh ws-ssh-alt stunnel4 nginx haproxy >/dev/null 2>&1; systemctl restart ws-ssh ws-ssh-alt stunnel4 nginx haproxy; systemctl enable dropbear.service >/dev/null 2>&1; systemctl restart dropbear.service >/dev/null 2>&1; systemctl is-active --quiet dropbear.service || exit 1; [ -f /usr/bin/badvpn-udpgw ] && systemctl enable udpgw >/dev/null 2>&1 && systemctl restart udpgw; sleep 2' || exit 1
 
