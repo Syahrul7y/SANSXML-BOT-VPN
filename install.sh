@@ -1022,6 +1022,7 @@ def kb_dash(uid):
     rows = [[B("➕  BUAT AKUN","buat_akun",style="primary"),B("⌛  TRIAL AKUN","trial_akun",style="primary")],
         [B("➕ PERPANJANG AKUN","perpanjang_akun",style="primary")],
         [B("💰 TOPUP SALDO","isi_saldo",style="primary"),B("📁 AKUN SAYA","my_accs",style="primary")],
+        [B("🌐 STATUS SERVER","admin|server_status",style="primary")],
         [B("♻️ REFRESH","refresh",style="primary")]]
     rows.append([B("⚙️ PENGATURAN","admin|menu",style="danger")])
     return InlineKeyboardMarkup(rows)
@@ -1078,7 +1079,7 @@ def kb_xray_srv(proto):
     return InlineKeyboardMarkup(r)
 def kb_admin():
     return InlineKeyboardMarkup([
-        [B("🌐 DAFTAR SERVER","admin|srv",style="primary"),B("🌐 STATUS SERVER","admin|server_status",style="primary")],
+        [B("🌐 DAFTAR SERVER","admin|srv",style="primary")],
         [B("👤 Pengguna","admin|users|0",style="primary"),B("📢 Broadcast","admin|bc",style="primary")],
         [B("🔄 Backup","admin|backup",style="primary"),B("💻 VPS","admin|vps",style="primary")],
         [B("🔙 Kembali","menu|main",style="danger")]])
@@ -1232,13 +1233,13 @@ def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="id_
         f"│ <b>BadVPN</b>     : 7100, 7300",
         f"│ <b>Slow Dns</b>   : {esc(str(slow_port))}",
         f"│ <b>Nama server</b> : {esc(slow_ns or '-')}",
-        f"│ <b>Pub key</b>    : {esc(slow_pubkey or '-')}",
-        f"└────────────────────────", "",
+        f"└────────────────────────",
+        f"🧩 <b>Pub key</b>    : {esc(slow_pubkey or '-')}",
         "──────────────────────────",
         f"🔐 <b>SSH WS</b>  : {esc(host)}:80@{esc(u)}:{esc(p)}",
         f"🔐 <b>SSH TLS</b> : {esc(host)}:443@{esc(u)}:{esc(p)}",
         f"🔐 <b>SSH UDP</b> : {esc(host)}:1-65535@{esc(u)}:{esc(p)}",
-        f"🔐 <b>SSH SLOW</b> : {esc(slow_line)}", "",
+        f"🔐 <b>SSH SLOW DNS</b> : {esc(slow_line)}", "",
         f"🧩 <b>PAYLOAD WS</b> : {esc(payload_ws)}", "",
         f"🧩 <b>PAYLOAD TLS</b> : {esc(payload_tls)}", "",
         f"┌────────────────────────",
@@ -1691,7 +1692,7 @@ async def cb(u,c):
             lines += [f"🖥️ {srv.get('name','-')}", f"└ Status: <b>{state}</b>", ""]
         lines += ["───────────────────────", "</blockquote>"]
         try:
-            await q.edit_message_text("\n".join(lines), reply_markup=InlineKeyboardMarkup([[B("🔄 Refresh","admin|server_status",style="success")],[B("🔙 Kembali","admin|menu",style="danger")]]), parse_mode="HTML")
+            await q.edit_message_text("\n".join(lines), reply_markup=InlineKeyboardMarkup([[B("🔄 Refresh","admin|server_status",style="success")],[B("🔙 Kembali","menu|main",style="danger")]]), parse_mode="HTML")
         except: pass
         return
 
@@ -1716,7 +1717,6 @@ async def cb(u,c):
                 row.append(B(lb,f"srv_edit|{kk}",style="primary" if is_server_complete(s) else "danger"))
             rows.append(row)
         rows.append([B("➕ TAMBAH","srv_add",style="success"),B("🚫 HAPUS","srv_del_list",style="danger")])
-        rows.append([B("🌐 STATUS SERVER","admin|server_status",style="primary")])
         rows.append([B("🔙 Kembali","admin|menu",style="danger")])
         try: await q.edit_message_text("\n".join(lines),reply_markup=InlineKeyboardMarkup(rows),parse_mode="HTML")
         except: pass
