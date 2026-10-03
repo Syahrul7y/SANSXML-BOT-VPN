@@ -851,7 +851,7 @@ def block_user(u, h=2, key="id_rmhweb_01"):
         d = load_json(BLOCK_FILE, {})
         block_ip = ""
         try:
-            c,o,_ = ssh_run(f"who | awk '$1=="{u}" {{print $5; exit}}'", key, timeout=5)
+            c,o,_ = ssh_run(f"""who | awk '$1=="{u}" {{print $5; exit}}'""", key, timeout=5)
             block_ip = (o or "").strip().strip("()")
         except: pass
         d[u] = {"blocked_at":datetime.now().isoformat(),
@@ -2881,12 +2881,95 @@ PYUSERS
     read
 }
 
+backup_menu(){
+    while true; do
+        clear
+        show_banner
+        printf "\n${PU}╭─ ${PK}BACKUP / RESTORE${PU} ─────────────────────────────────────────────╮${N}\n"
+        printf " ${CY}[1]${N}  ${WH}RESET SC CLEAR${N}\n"
+        printf " ${CY}[2]${N}  ${WH}AUTO BACKUP${N}             ${GY}$(backup_status_text)${N}\n"
+        printf " ${CY}[0]${N}  ${WH}KEMBALI${N}\n"
+        printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
+        echo -ne "${PU2}✦${N} ${CY}Select${N} ${WH}[0-2]${N} ${PU2}›${N} "
+        read -r bc
+        case "$bc" in
+            1|01) reset_sc_clear ;;
+            2|02) toggle_auto_backup ;;
+            0|00) return ;;
+            *) echo -e "\n  ${RE}Pilihan tidak valid${N}"; sleep 1 ;;
+        esac
+    done
+}
+backup_status_text(){
+    if crontab -l 2>/dev/null | grep -q 'vpnbot_backup.sh'; then
+        printf 'AKTIF'
+    else
+        printf 'TIDAK AKTIF'
+    fi
+}
+toggle_auto_backup(){
+    if crontab -l 2>/dev/null | grep -q 'vpnbot_backup.sh'; then
+        crontab -l 2>/dev/null | grep -v 'vpnbot_backup.sh' | crontab -
+        clear; show_banner; box_top "AUTO BACKUP"
+        kvc "Status" "TIDAK AKTIF" "${YE}"
+        kv "Cron" "Dinonaktifkan"
+        box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read
+    else
+        if [ ! -x /root/vpnbot_backup.sh ]; then
+            clear; show_banner; box_top "AUTO BACKUP"
+            kvc "Status" "GAGAL DIAKTIFKAN" "${RE}"
+            kv "Keterangan" "File /root/vpnbot_backup.sh belum tersedia"
+            kv "Solusi" "Setup backup dari bot terlebih dahulu"
+            box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read
+            return
+        fi
+        ( crontab -l 2>/dev/null; echo '*/5 * * * * /root/vpnbot_backup.sh >/dev/null 2>&1' ) | crontab -
+        clear; show_banner; box_top "AUTO BACKUP"
+        kvc "Status" "AKTIF" "${GR}"
+        kv "Interval" "Setiap 5 menit"
+        box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read
+    fi
+}
+reset_sc_clear(){
+    clear; show_banner
+    box_top "RESET SC CLEAR"
+    printf " ${YE}Tindakan ini akan menghapus data akun bot dan user SSH yang dibuat SC.${N}\n"
+    printf " ${GY}Backup GitHub tidak dihapus.${N}\n\n"
+    echo -ne "${RE}Ketik RESET untuk melanjutkan${N} ${PU}›${N} "
+    read -r confirm
+    [ "$confirm" != "RESET" ] && { echo -e "\n  ${GY}Dibatalkan.${N}"; sleep 1; return; }
+    echo -e "\n  ${PU2}Membersihkan data...${N}"
+    python3 - <<'PYRESET'
+import json, os, subprocess
+acc='/root/vpnbot_accounts.json'
+tracked=[]
+try:
+    data=json.load(open(acc, encoding='utf-8'))
+    if isinstance(data,dict):
+        tracked=[u for u in data.keys() if isinstance(u,str) and u and u!='root']
+except Exception:
+    pass
+for u in tracked:
+    subprocess.run(['pkill','-9','-u',u],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+    subprocess.run(['userdel','-r',u],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
+for f in ('vpnbot_users.json','vpnbot_balance.json','vpnbot_accounts.json','vpnbot_trial.json','vpnbot_trx.json','vpnbot_blocked.json'):
+    try: os.remove('/root/'+f)
+    except Exception: pass
+PYRESET
+    clear; show_banner; box_top "RESET SC CLEAR"
+    kvc "Result" "✓ RESET SC SELESAI" "${GR}"
+    kv "Data JSON" "Dibersihkan"
+    kv "User SSH" "Dihapus"
+    kv "Backup GitHub" "Tidak dihapus"
+    box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read
+}
+
 show_menu(){ clear
     show_banner
     printf "\n${PU}╭─ ${PK}MENU${PU} ───────────────────────────────────────────────────────╮${N}\n"
-    printf " ${CY}[1]${N}  ${WH}DAFTAR USER${N}             ${CY}[4]${N}  ${WH}SERVICE STATUS${N}\n"
-    printf " ${CY}[2]${N}  ${WH}VPS INFORMATION${N}        ${CY}[5]${N}  ${WH}JALANKAN BOT${N}\n"
-    printf " ${CY}[3]${N}  ${WH}BANDWIDTH${N}              ${CY}[6]${N}  ${WH}EXIT / BERSIHKAN SC${N}\n"
+    printf " ${CY}[1]${N}  ${WH}DAFTAR USER${N}             ${CY}[4]${N}  ${WH}CEK SERVICE${N}\n"
+    printf " ${CY}[2]${N}  ${WH}INFORMATION VPS${N}         ${CY}[5]${N}  ${WH}JALANKAN BOT${N}\n"
+    printf " ${CY}[3]${N}  ${WH}BACKUP / RESTORE${N}        ${CY}[6]${N}  ${WH}EXIT${N}\n"
     printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
     echo -ne "${PU2}✦${N} ${CY}Select${N} ${WH}[1-6]${N} ${PU2}›${N} "
 }
@@ -3085,7 +3168,7 @@ while true; do
     case "$choice" in
         1|01) show_user_list ;;
         2|02) show_vps_info ;;
-        3|03) show_bandwidth ;;
+        3|03) backup_menu ;;
         4|04) show_services ;;
         5|05) run_bot ;;
         6|06) uninstall_sc ;;
