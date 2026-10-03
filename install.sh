@@ -2514,9 +2514,9 @@ echo -e "  ${CYAN}▸${NC} ${WHITE}Install VPS Dashboard${NC}"
 
 cat > /usr/local/bin/sansxml-menu << 'MENUEOF'
 #!/bin/bash
-PU='\033[1;34m'; PU2='\033[1;36m'; CY='\033[1;36m'
-PK='\033[1;34m'; WH='\033[1;37m'; GR='\033[1;34m'
-RE='\033[1;31m'; YE='\033[1;33m'; GY='\033[1;36m'; N='\033[0m'
+PU=$'\033[1;34m'; PU2=$'\033[1;36m'; CY=$'\033[1;36m'
+PK=$'\033[1;34m'; WH=$'\033[1;37m'; GR=$'\033[1;32m'
+RE=$'\033[1;31m'; YE=$'\033[1;33m'; YL=$'\033[1;33m'; GY=$'\033[1;36m'; N=$'\033[0m'
 W=62
 get_ip(){ hostname -I 2>/dev/null | awk '{print $1}'; }
 get_city_isp(){
@@ -2576,6 +2576,66 @@ try:
             print(f'{r+t:.2f} GB'); exit()
     print('0 GB')
 except: print('0 GB')" 2>/dev/null || echo "0 GB"; }
+status_dot(){ [ "$1" = "active" ] && printf "${GR}●${N}" || printf "${RE}●${N}"; }
+get_xray_count(){
+    local proto="$1" f="/root/vpnbot_accounts.json"
+    [ ! -f "$f" ] && { echo 0; return; }
+    python3 - "$proto" "$f" <<'PYCODE'
+import json,sys
+proto,path=sys.argv[1],sys.argv[2]
+try:
+    d=json.load(open(path))
+    print(sum(1 for a in d.values() if a.get("proto")==proto))
+except Exception:
+    print(0)
+PYCODE
+}
+get_ssh_count(){
+    local f="/root/vpnbot_accounts.json"
+    [ ! -f "$f" ] && { echo 0; return; }
+    python3 - "$f" <<'PYCODE'
+import json,sys
+try:
+    d=json.load(open(sys.argv[1])); print(sum(1 for a in d.values() if a.get("proto","ssh")=="ssh"))
+except Exception:
+    print(0)
+PYCODE
+}
+get_traffic_pair(){
+    local mode="$1"
+    command -v vnstat >/dev/null 2>&1 || { echo "0 MiB  0 MiB  0 MiB"; return; }
+    vnstat --json "$mode" 1 2>/dev/null | python3 -c '
+import sys,json
+mode=sys.argv[1]
+try:
+    d=json.load(sys.stdin); ifs=d.get("interfaces",[])
+    arr=ifs[0].get("traffic",{}).get("day" if mode=="d" else "month",[]) if ifs else []
+    x=arr[-1] if arr else {}
+    rx=float(x.get("rx",0)); tx=float(x.get("tx",0)); total=rx+tx
+    def fmt(v):
+        if v >= 1024**3: return f"{v/1024**3:.1f} GiB"
+        return f"{v/1024**2:.0f} MiB"
+    print(f"{fmt(rx)}  {fmt(tx)}  {fmt(total)}")
+except Exception:
+    print("0 MiB  0 MiB  0 MiB")
+' "$mode"
+}
+get_speed(){
+    local a b rx1 tx1 rx2 tx2
+    a=$(awk 'NR>2{gsub(":","",$1);rx+=$2;tx+=$10}END{print rx,tx}' /proc/net/dev)
+    sleep 1
+    b=$(awk 'NR>2{gsub(":","",$1);rx+=$2;tx+=$10}END{print rx,tx}' /proc/net/dev)
+    rx1=$(awk '{print $1}' <<<"$a"); tx1=$(awk '{print $2}' <<<"$a")
+    rx2=$(awk '{print $1}' <<<"$b"); tx2=$(awk '{print $2}' <<<"$b")
+    awk -v r=$((rx2-rx1)) -v t=$((tx2-tx1)) 'BEGIN{printf "%.2f Mbit/s",((r+t)*8)/1000000}'
+}
+get_cpu_pct(){
+    local a b
+    a=$(awk '/^cpu /{print $2+$3+$4+$5+$6+$7+$8, $5}' /proc/stat)
+    sleep 0.2
+    b=$(awk '/^cpu /{print $2+$3+$4+$5+$6+$7+$8, $5}' /proc/stat)
+    awk -v a="$a" -v b="$b" 'BEGIN { split(a,x); split(b,y); dt=y[1]-x[1]; di=y[2]-x[2]; if (dt > 0) printf "%d", ((dt-di)/dt)*100; else printf "0" }'
+}
 box_top(){ local t="$1"; local tl=${#t}; local fill=$((W-tl-5)); local l=""
     for ((i=0;i<fill;i++)); do l="${l}─"; done
     printf "${PU}╭─[${PK} %s ${PU}]${l}╮${N}\n" "$t"; }
@@ -2589,99 +2649,94 @@ kv(){ local key=$(printf '%-9s' "$1"); printf " ${GY}%s${N} ${PK}›${N} ${WH}%s
 kvc(){ local key=$(printf '%-9s' "$1"); printf " ${GY}%s${N} ${PK}›${N} ${3}%s${N}\n" "$key" "$2"; }
 bar(){ local p=$1; local f=$((p/10)); local o=""; for ((i=1;i<=10;i++)); do [ $i -le $f ] && o="${o}█" || o="${o}░"; done; echo "$o"; }
 center_text(){
-    local text="$1" width="${2:-62}" len pad
-    len=${#text}; pad=$(( (width-len)/2 ))
-    (( pad < 0 )) && pad=0
-    printf "%*s%s\n" "$pad" "" "$text"
+    local text="$1" width="${2:-60}" clean len pad
+    clean=$(printf '%b' "$text" | sed $'s/\\033\\[[0-9;]*m//g')
+    len=${#clean}; pad=$(( (width-len)/2 )); (( pad < 0 )) && pad=0
+    printf "%*s%b\n" "$pad" "" "$text"
 }
 show_banner(){ clear
     local os kernel ram disk up now ip bot ws ssl udp xry ngx drp hap
-    local sshc vmc vlc trc total geo city isp country today month speed upv downv tv
+    local sshc vmc vlc trc total geo city isp country today month downv upv tv speed onl
     os=$(grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"')
-    kernel=$(uname -r 2>/dev/null)
-    ram=$(get_ram_pct); disk=$(get_disk_pct); up=$(get_uptime)
-    now=$(date '+%d %b %Y • %H:%M:%S')
-    ip=$(get_ip)
+    kernel=$(uname -r 2>/dev/null); ram=$(get_ram_pct); disk=$(get_disk_pct); up=$(get_uptime)
+    now=$(date '+%d %b %Y • %H:%M:%S'); ip=$(get_ip)
     geo=$(get_city_isp); IFS='|' read -r city isp country <<< "$geo"
-    bot=$(systemctl is-active vpnbot 2>/dev/null); ws=$(systemctl is-active ws-ssh 2>/dev/null)
-    ssl=$(systemctl is-active stunnel4 2>/dev/null); udp=$(systemctl is-active udpgw 2>/dev/null)
-    xry=$(systemctl is-active xray 2>/dev/null); ngx=$(systemctl is-active nginx 2>/dev/null)
-    drp=$(systemctl is-active dropbear 2>/dev/null); hap=$(systemctl is-active haproxy 2>/dev/null)
+    bot=$(systemctl is-active vpnbot 2>/dev/null || echo inactive)
+    ws=$(systemctl is-active ws-ssh 2>/dev/null || echo inactive)
+    ssl=$(systemctl is-active stunnel4 2>/dev/null || echo inactive)
+    udp=$(systemctl is-active udpgw 2>/dev/null || echo inactive)
+    xry=$(systemctl is-active xray 2>/dev/null || echo inactive)
+    ngx=$(systemctl is-active nginx 2>/dev/null || echo inactive)
+    drp=$(systemctl is-active dropbear 2>/dev/null || echo inactive)
+    hap=$(systemctl is-active haproxy 2>/dev/null || echo inactive)
     sshc=$(get_ssh_count); vmc=$(get_xray_count vmess); vlc=$(get_xray_count vless); trc=$(get_xray_count trojan)
-    total=$((sshc+vmc+vlc+trc))
-    today=$(get_traffic_pair d); month=$(get_traffic_pair m)
-    downv=$(awk '{print $1}' <<< "$today"); upv=$(awk '{print $2}' <<< "$today"); tv=$(awk '{print $3}' <<< "$today")
-    speed=$(get_speed 2>/dev/null)
+    total=$((sshc+vmc+vlc+trc)); onl=$(get_online)
+    today=$(get_traffic_pair d); read -r downv upv tv <<< "$today"
+    speed=$(get_speed 2>/dev/null || echo "0.00 Mbit/s")
 
-    local W=58
+    local W=60
     line(){ printf "${CY}╭%*s╮${N}\n" "$W" '' | sed 's/ /─/g'; }
     bottom(){ printf "${CY}╰%*s╯${N}\n" "$W" '' | sed 's/ /─/g'; }
-    status(){ [ "$1" = "active" ] && printf "${GR}ONLINE ●${N}" || printf "${RE}OFFLINE ●${N}"; }
-    section(){ printf "${CY}│${N}   ${PU}>>> %s <<<${N}%*s${CY}│${N}\n" "$1" "$2" ''; }
-
+    row(){ printf "${CY}│${N} %b%*s${CY}│${N}\n" "$1" "$((W-1))" ''; }
+    stat(){ [ "$1" = "active" ] && printf "${GR}ONLINE ●${N}" || printf "${RE}OFFLINE ●${N}"; }
     echo
-    center_text "${WH}══✦ SCRIPT AUTO INSTAL VPN V2.1 ✦══${N}" 60
-    center_text "${WH}${now}${N}" 60
+    center_text "${WH}══✦ SCRIPT AUTO INSTAL VPN V2.1 ✦══${N}" "$W"
+    center_text "${WH}${now}${N}" "$W"
     echo
 
     line
-    printf "${CY}│${N}   ${PU}🖥 SERVER INFORMATION${N}%*s${CY}│${N}\n" 32 ''
-    printf "${CY}│${N}   ${GY}├─${N} ${YL}OS       ${N}= ${WH}%-31s${N}${CY}│${N}\n" "${os:0:31}"
-    printf "${CY}│${N}   ${GY}├─${N} ${YL}Kernel   ${N}= ${WH}%-31s${N}${CY}│${N}\n" "${kernel:0:31}"
-    printf "${CY}│${N}   ${GY}├─${N} ${YL}CPU      ${N}= ${WH}%-31s${N}${CY}│${N}\n" "$(nproc 2>/dev/null || echo 0) vCPU"
-    printf "${CY}│${N}   ${GY}├─${N} ${YL}RAM      ${N}= ${GR}%s %3s%%${N}%*s${CY}│${N}\n" "$(bar "$ram")" "$ram" 13 ''
-    printf "${CY}│${N}   ${GY}├─${N} ${YL}Disk     ${N}= ${GR}%s %3s%%${N}%*s${CY}│${N}\n" "$(bar "$disk")" "$disk" 13 ''
-    printf "${CY}│${N}   ${GY}└─${N} ${YL}Uptime   ${N}= ${WH}%-31s${N}${CY}│${N}\n" "$up"
+    printf "${CY}│${N}   ${PU}🖥 SERVER INFORMATION${N}%*s${CY}│${N}\n" 33 ''
+    printf "${CY}│${N}   ${GY}├─${N} ${YL}OS       ${N}= ${WH}%-39s${N}${CY}│${N}\n" "${os:0:39}"
+    printf "${CY}│${N}   ${GY}├─${N} ${YL}Kernel   ${N}= ${WH}%-39s${N}${CY}│${N}\n" "${kernel:0:39}"
+    printf "${CY}│${N}   ${GY}├─${N} ${YL}CPU      ${N}= ${WH}%-39s${N}${CY}│${N}\n" "$(nproc 2>/dev/null || echo 0) vCPU"
+    printf "${CY}│${N}   ${GY}├─${N} ${YL}RAM      ${N}= ${GR}%s %3s%%${N}%*s${CY}│${N}\n" "$(bar "$ram")" "$ram" 18 ''
+    printf "${CY}│${N}   ${GY}├─${N} ${YL}Disk     ${N}= ${GR}%s %3s%%${N}%*s${CY}│${N}\n" "$(bar "$disk")" "$disk" 18 ''
+    printf "${CY}│${N}   ${GY}└─${N} ${YL}Uptime   ${N}= ${WH}%-39s${N}${CY}│${N}\n" "$up"
     bottom; echo
 
     line
-    printf "${CY}│${N}   ${PU}🌐 NETWORK${N}%*s${CY}│${N}\n" 40 ''
-    printf "${CY}│${N}   ${GY}├─${N} ${YL}IP       ${N}= ${WH}%-31s${N}${CY}│${N}\n" "${ip:0:31}"
-    printf "${CY}│${N}   ${GY}├─${N} ${YL}ISP      ${N}= ${WH}%-31s${N}${CY}│${N}\n" "${isp:0:31}"
-    printf "${CY}│${N}   ${GY}└─${N} ${YL}Country  ${N}= ${WH}%-31s${N}${CY}│${N}\n" "${country:-Indonesia}"
+    printf "${CY}│${N}   ${PU}🌐 NETWORK${N}%*s${CY}│${N}\n" 42 ''
+    printf "${CY}│${N}   ${GY}├─${N} ${YL}IP       ${N}= ${WH}%-39s${N}${CY}│${N}\n" "${ip:0:39}"
+    printf "${CY}│${N}   ${GY}├─${N} ${YL}ISP      ${N}= ${WH}%-39s${N}${CY}│${N}\n" "${isp:0:39}"
+    printf "${CY}│${N}   ${GY}└─${N} ${YL}Country  ${N}= ${WH}%-39s${N}${CY}│${N}\n" "${country:-ID}"
     bottom; echo
 
     line
-    printf "${CY}│${N}   ${PU}⚙ SERVICES${N}%*s${CY}│${N}\n" 40 ''
-    printf "${CY}│${N}   ${GY}├─${N} ${YL}SSH      ${N}= $(status "$ws")%*s${CY}│${N}\n" 16 ''
-    printf "${CY}│${N}   ${GY}├─${N} ${YL}UDP      ${N}= $(status "$udp")%*s${CY}│${N}\n" 16 ''
-    printf "${CY}│${N}   ${GY}├─${N} ${YL}SSL      ${N}= $(status "$ssl")%*s${CY}│${N}\n" 16 ''
-    printf "${CY}│${N}   ${GY}├─${N} ${YL}Nginx    ${N}= $(status "$ngx")%*s${CY}│${N}\n" 16 ''
-    printf "${CY}│${N}   ${GY}├─${N} ${YL}Xray     ${N}= $(status "$xry")%*s${CY}│${N}\n" 16 ''
-    printf "${CY}│${N}   ${GY}├─${N} ${YL}Dropbear ${N}= $(status "$drp")%*s${CY}│${N}\n" 16 ''
-    printf "${CY}│${N}   ${GY}├─${N} ${YL}HAProxy  ${N}= $(status "$hap")%*s${CY}│${N}\n" 16 ''
-    printf "${CY}│${N}   ${GY}└─${N} ${YL}Bot      ${N}= $(status "$bot")%*s${CY}│${N}\n" 16 ''
+    printf "${CY}│${N}   ${PU}⚙ SANSXML VPN SERVICES${N}%*s${CY}│${N}\n" 32 ''
+    printf "${CY}│${N}   ${WH}SSH      : %-12b  UDP      : %-12b${N}${CY}│${N}\n" "$(stat "$ws")" "$(stat "$udp")"
+    printf "${CY}│${N}   ${WH}SSL      : %-12b  NGINX    : %-12b${N}${CY}│${N}\n" "$(stat "$ssl")" "$(stat "$ngx")"
+    printf "${CY}│${N}   ${WH}XRAY     : %-12b  DROPBEAR : %-12b${N}${CY}│${N}\n" "$(stat "$xry")" "$(stat "$drp")"
+    printf "${CY}│${N}   ${WH}HAPROXY  : %-12b  BOT      : %-12b${N}${CY}│${N}\n" "$(stat "$hap")" "$(stat "$bot")"
     bottom; echo
 
     line
-    printf "${CY}│${N}   ${PU}📊 TRAFFIC${N}%*s${CY}│${N}\n" 39 ''
-    printf "${CY}│${N}   ${GY}├─${N} ${YL}Upload     ${N}= ${WH}%-10s${N} ${YL}Download ${N}= ${WH}%-10s${N}%*s${CY}│${N}\n" "${upv:-0}" "${downv:-0}" 0 ''
-    printf "${CY}│${N}   ${GY}├─${N} ${YL}Total      ${N}= ${WH}%-10s${N} ${YL}Bandwidth ${N}= ${WH}%-9s${N}%*s${CY}│${N}\n" "${tv:-0}" "N/A" 0 ''
-    printf "${CY}│${N}   ${GY}└─${N} ${YL}Speed      ${N}= ${WH}%-31s${N}${CY}│${N}\n" "${speed:-0}"
+    printf "${CY}│${N}   ${PU}📊 TRAFFIC${N}%*s${CY}│${N}\n" 43 ''
+    printf "${CY}│${N}   ${GY}├─${N} ${YL}Upload     ${N}= ${WH}%-12s${N} ${YL}Download =${N} ${WH}%-12s${N}${CY}│${N}\n" "${upv:-0}" "${downv:-0}"
+    printf "${CY}│${N}   ${GY}├─${N} ${YL}Total      ${N}= ${WH}%-12s${N} ${YL}Bandwidth =${N} ${WH}%-10s${N}${CY}│${N}\n" "${tv:-0}" "N/A"
+    printf "${CY}│${N}   ${GY}└─${N} ${YL}Speed      ${N}= ${WH}%-39s${N}${CY}│${N}\n" "$speed"
     bottom; echo
 
     line
-    printf "${CY}│${N}   ${PU}👤 ACCOUNTS${N}%*s${CY}│${N}\n" 38 ''
-    printf "${CY}│${N}   ${GY}└─${N} ${WH}VMESS${N} ${CY}%s${N} • ${WH}VLESS${N} ${CY}%s${N} • ${WH}TROJAN${N} ${CY}%s${N} • ${WH}SSH${N} ${CY}%s${N} • ${WH}TOTAL${N} ${GR}%s${N}%*s${CY}│${N}\n" "$vmc" "$vlc" "$trc" "$sshc" "$total" 1 ''
+    printf "${CY}│${N}   ${PU}👤 ACCOUNTS${N}%*s${CY}│${N}\n" 42 ''
+    printf "${CY}│${N}   ${WH}SSH/OVPN${N} ${GR}%s${N} • ${WH}VMESS${N} ${GR}%s${N} • ${WH}VLESS${N} ${GR}%s${N} • ${WH}TROJAN${N} ${GR}%s${N} • ${WH}TOTAL${N} ${GR}%s${N}%*s${CY}│${N}\n" "$sshc" "$vmc" "$vlc" "$trc" "$total" 1 ''
+    printf "${CY}│${N}   ${GY}LIVE${N} ${GR}●${N} ${WH}OK${N}   ${GY}ONLINE${N} ${WH}%s${N}   ${GY}RAM${N} ${WH}%s%%${N}   ${GY}CPU${N} ${WH}%s%%${N}%*s${CY}│${N}\n" "$onl" "$ram" "$(get_cpu_pct)" 1 ''
     bottom; echo
 
     line
     printf "${CY}│${N}        ${PU}>>> SANSXML MAIN MENU <<<${N}%*s${CY}│${N}\n" 28 ''
-    printf "${CY}│${N}   ${CY}[01]${N} ${WH}DAFTAR USER${N}%*s${CY}[04]${N} ${WH}CEK SERVICE${N}%*s${CY}│${N}\n" 9 '' 5 ''
-    printf "${CY}│${N}   ${CY}[02]${N} ${WH}INFORMATION VPS${N}%*s${CY}[05]${N} ${WH}JALANKAN BOT${N}%*s${CY}│${N}\n" 2 '' 5 ''
-    printf "${CY}│${N}   ${CY}[03]${N} ${WH}BACKUP / RESTORE${N}%*s${CY}[06]${N} ${WH}EXIT${N}%*s${CY}│${N}\n" 0 '' 15 ''
+    printf "${CY}│${N}   ${CY}[01]${N} ${WH}DAFTAR USER${N}       ${CY}[04]${N} ${WH}CEK SERVICE${N}%*s${CY}│${N}\n" 5 ''
+    printf "${CY}│${N}   ${CY}[02]${N} ${WH}INFORMATION VPS${N}   ${CY}[05]${N} ${WH}JALANKAN BOT${N}%*s${CY}│${N}\n" 4 ''
+    printf "${CY}│${N}   ${CY}[03]${N} ${WH}BACKUP / RESTORE${N}  ${CY}[06]${N} ${WH}EXIT${N}%*s${CY}│${N}\n" 10 ''
     bottom
     line
-    printf "${CY}│${N}   ${PU}✦${N} ${WH}SELECT MENU [1-6] ›${N}%*s${CY}│${N}\n" 28 ''
+    printf "${CY}│${N}   ${PU}✦${N} ${WH}SELECT MENU [1-6] ›${N}%*s${CY}│${N}\n" 32 ''
     printf "${CY}│${N}%*s${GY}❖  POWERED BY ©SANSXML  ❖${N}%*s${CY}│${N}\n" 17 '' 17 ''
     bottom
 }
 
 show_menu(){
-    clear
     show_banner
-    echo -ne "${WH}Select [1-6] › ${N}"
-    read choice
+    IFS= read -r choice
     case "$choice" in
         1|01) show_user_list ;;
         2|02) show_vps_info ;;
