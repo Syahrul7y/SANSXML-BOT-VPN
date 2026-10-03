@@ -267,16 +267,27 @@ EOF
   mkdir -p "$DNSTT_DIR"
   chmod 700 "$DNSTT_DIR"
 
-  # Build the official DNSTT server source. This avoids relying on an unofficial binary URL.
+  # Build DNSTT. Prefer the upstream mirror on GitHub because some VPS DNS
+  # resolvers cannot reach the original git host reliably.
   if ! command -v go >/dev/null 2>&1; then
-    echo "Go compiler tidak tersedia" >&2
+    apt-get update -y >>/tmp/sansxml-dnstt-build.log 2>&1 || true
+    apt-get install -y --no-install-recommends golang-go >>/tmp/sansxml-dnstt-build.log 2>&1 || true
+  fi
+  if ! command -v go >/dev/null 2>&1; then
+    echo "Go compiler tidak tersedia. Lihat /tmp/sansxml-dnstt-build.log" >&2
     exit 1
   fi
   if [ ! -x "$DNSTT_BIN" ] || ! "$DNSTT_BIN" -h >/dev/null 2>&1; then
     rm -rf /tmp/dnstt-src
-    git clone --depth=1 https://www.bamsoftware.com/git/dnstt.git /tmp/dnstt-src >/tmp/sansxml-dnstt-build.log 2>&1
+    if ! git clone --depth=1 https://github.com/Mygod/dnstt.git /tmp/dnstt-src >>/tmp/sansxml-dnstt-build.log 2>&1; then
+      echo "Gagal mengambil source DNSTT dari GitHub" >&2
+      exit 1
+    fi
     cd /tmp/dnstt-src/dnstt-server
-    go build -trimpath -o "$DNSTT_BIN" . >>/tmp/sansxml-dnstt-build.log 2>&1
+    if ! go build -trimpath -o "$DNSTT_BIN" . >>/tmp/sansxml-dnstt-build.log 2>&1; then
+      echo "Gagal compile DNSTT. Lihat /tmp/sansxml-dnstt-build.log" >&2
+      exit 1
+    fi
     chmod 0755 "$DNSTT_BIN"
     rm -rf /tmp/dnstt-src
   fi
@@ -292,6 +303,8 @@ EOF
   chmod 644 "$DNSTT_DIR/server.pub"
 
   DNSTT_PUBKEY="$(tr -d '[:space:]' < "$DNSTT_DIR/server.pub")"
+  # Some builds may prefix the value with 'pubkey'; keep only the hexadecimal key.
+  DNSTT_PUBKEY="$(printf '%s' "$DNSTT_PUBKEY" | sed -n 's/.*\([0-9A-Fa-f]\{64\}\).*/\1/p')"
   if ! printf '%s' "$DNSTT_PUBKEY" | grep -Eq '^[0-9a-fA-F]{64}$'; then
     echo "DNSTT public key bukan 64 karakter hexadecimal" >&2
     exit 1
@@ -505,6 +518,7 @@ systemctl restart ssh 2>/dev/null || systemctl restart sshd
 
 # Read the real DNSTT values after installation so the bot config is not a placeholder.
 DNSTT_PUBKEY="$(tr -d '[:space:]' < /etc/dnstt/server.pub 2>/dev/null || true)"
+DNSTT_PUBKEY="$(printf '%s' "$DNSTT_PUBKEY" | sed -n 's/.*\([0-9A-Fa-f]\{64\}\).*/\1/p')"
 DNSTT_SLOW_HOST="$(awk -F= '/^SLOW_NS_HOST=/{print $2}' /etc/dnstt/config 2>/dev/null | tail -n1)"
 [ -n "$DNSTT_SLOW_HOST" ] || DNSTT_SLOW_HOST="slow.${DOMAIN}"
 if ! printf '%s' "$DNSTT_PUBKEY" | grep -Eq '^[0-9a-fA-F]{64}$'; then
