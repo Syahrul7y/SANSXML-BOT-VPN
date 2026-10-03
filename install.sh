@@ -1134,12 +1134,30 @@ def _local_slowdns():
             with open(pth, encoding="utf-8", errors="ignore") as fh:
                 for line in fh:
                     if "=" in line:
-                        k,v = line.rstrip("\n").split("=",1); vals[k] = v.strip()
+                        k,v = line.rstrip("\n").split("=",1)
+                        vals[k.strip()] = v.strip().strip('"').strip("'")
+        # DNSTT public key is a 64-character hexadecimal value.  Do not require
+        # the file to contain only the key; accept formats such as
+        # "pubkey: <64hex>" as well.
         pub = "/etc/dnstt/server.pub"
         if os.path.exists(pub):
-            key = "".join(open(pub, encoding="utf-8", errors="ignore").read().split())
-            if re.fullmatch(r"[0-9a-fA-F]{64}", key): vals["SLOW_PUBKEY"] = key.lower()
-    except: pass
+            raw = open(pub, encoding="utf-8", errors="ignore").read()
+            m = re.search(r"(?<![0-9a-fA-F])[0-9a-fA-F]{64}(?![0-9a-fA-F])", raw)
+            if m:
+                vals["SLOW_PUBKEY"] = m.group(0).lower()
+        # Fallback: some installations may store the generated key in config.
+        if not vals.get("SLOW_PUBKEY"):
+            for k,v in vals.items():
+                if "PUB" in k.upper() or "KEY" in k.upper():
+                    m = re.search(r"(?<![0-9a-fA-F])[0-9a-fA-F]{64}(?![0-9a-fA-F])", str(v))
+                    if m:
+                        vals["SLOW_PUBKEY"] = m.group(0).lower()
+                        break
+        # Accept either naming convention for the authoritative NS hostname.
+        if not vals.get("SLOW_NS_HOST"):
+            vals["SLOW_NS_HOST"] = vals.get("SLOW_DNS_AUTH_NS") or vals.get("NS_HOST") or ""
+    except Exception:
+        pass
     return vals
 
 _LOCAL_CITY, _LOCAL_ISP = _local_server_meta()
@@ -1170,12 +1188,20 @@ def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="id_
     slow_port = int(srv.get("slow_port", 5300) or 5300)
     slow_ns = str(srv.get("slow_ns") or "").strip()
     slow_pubkey = str(srv.get("slow_pubkey") or "").strip()
+    # Always inspect the local DNSTT files when this VPS owns the selected
+    # server.  This also works for ID-RMHWEB-04 and any newly added local server.
     if is_local_server(server_key):
         _sd = _local_slowdns()
         slow_port = int(_sd.get("SLOW_PORT", slow_port) or slow_port)
         slow_ns = _sd.get("SLOW_NS_HOST", slow_ns) or slow_ns
         slow_pubkey = _sd.get("SLOW_PUBKEY", slow_pubkey) or slow_pubkey
-    slow_line = f"{slow_ns}:{slow_port}@{u}:{p}" if slow_ns and slow_pubkey else "-"
+    # If the config has no NS hostname but the installer domain is known,
+    # derive the standard DNSTT NS hostname used by this SC.
+    if not slow_ns:
+        base_domain = str(srv.get("domain") or SSH_HOST).strip()
+        if base_domain:
+            slow_ns = "ns." + base_domain
+    slow_line = f"{slow_ns}:{slow_port}@{u}:{p}" if slow_ns and re.fullmatch(r"[0-9a-fA-F]{64}", slow_pubkey) else "-"
     payload_ws = "GET /cdn-cgi/trace HTTP/1.1[crlf]Host: [host][crlf][crlf]GET-RAY / HTTP/1.1[crlf]Host: [host][crlf]Connection: Upgrade[crlf]User-Agent: [ua][crlf]Upgrade: websocket[crlf][crlf]"
     payload_tls = "GET / HTTP/1.1[crlf]Host: [host][crlf]User-Agent: [ua][crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf][crlf]"
     esc = lambda x: str(x).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
