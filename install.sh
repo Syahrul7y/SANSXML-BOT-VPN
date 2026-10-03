@@ -1075,6 +1075,7 @@ def kb_dash(uid):
         [B("➕ PERPANJANG AKUN","perpanjang_akun",style="primary")],
         [B("💰 TOPUP SALDO","isi_saldo",style="primary"),B("📁 AKUN SAYA","my_accs",style="primary")],
         [B("🌐 STATUS SERVER","admin|server_status",style="primary")],
+        [B("📢 Channel","channel",style="primary")],
         [B("♻️ REFRESH","refresh",style="primary")]]
     rows.append([B("⚙️ PENGATURAN","admin|menu",style="danger")])
     return InlineKeyboardMarkup(rows)
@@ -1160,7 +1161,7 @@ def dash_text(user, uid):
               f"├ Hari ini : <b>{st['hari']} Akun</b>",
               f"├ Bulan ini : <b>{st['bulan']} Akun</b>",
               f"├ Total Transaksi : <b>{rupiah(inc['total'])}</b>",
-              f"╰ Kuota Trial     : <b>{trial_left(uid)}x Hari</b>","","───────────────────────","</blockquote>"]
+              f"╰ Kuota Trial     : <b>{trial_left(uid)}x Hari</b>","","</blockquote>"]
     return "\n".join(lines)
 def pilih_layanan_text():
     return "<blockquote>\n🌐 <b>PILIH LAYANAN VPN</b>\n───────────────────────\nSilakan pilih protocol akun yang ingin di buat</blockquote>"
@@ -1178,7 +1179,7 @@ def _server_list_text(title):
                   f"├ Harga Bulanan : <b>{rupiah(s.get('price_month',0))}</b>",
                   f"├ Limit IP      : {s.get('ip_limit',1)} IP",
                   f"╰ Slot Tersedia : <b>{used}/{mx} {cek}</b>", ""]
-    lines += ["─────────────────────────", "</blockquote>"]
+    lines += ["</blockquote>"]
     return "\n".join(lines)
 
 def ssh_server_text():
@@ -1189,11 +1190,11 @@ def xray_server_text(proto):
     return _server_list_text(title)
 
 def saldo_text(uid, nom=""):
-    return (f"<blockquote>💰 <b>Masukkan jumlah nominal topup saldo</b>\n\n"
-            f"Jumlah saldo VPN saat ini: <b>{rupiah(get_bal(uid))}</b>\n\n"
-            f"Nominal input: <b>{rupiah(nom) if nom else 'Rp 0'}</b>\n"
-            f"Minimal topup {rupiah(MIN_TOPUP)}\n\n"
-            f"❖ <i>Saldo dapat digunakan untuk membuat akun VPN</i> ❖\n</blockquote>")
+    return (f"<blockquote>💰 <b>Masukkan jumlah nominal topup saldo VPN</b>\n"
+            f"────────────────────────────────────\n"
+            f"Jumlah saldo VPN anda saat ini: {rupiah(get_bal(uid))}\n\n"
+            f"Nominal input: {rupiah(nom) if nom else 'Rp 0'}\n"
+            f"Minimal topup {rupiah(MIN_TOPUP)}</blockquote>")
 
 def _local_server_meta():
     # Fill City/ISP automatically when the server config left them blank.
@@ -1286,14 +1287,14 @@ def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="id_
         f"│ <b>Slow Dns</b>   : {esc(str(slow_port))}",
         f"│ <b>Nama server</b> : {esc(slow_ns or '-')}",
         f"└────────────────────────",
-        f"🧩 <b>Pub key</b>    : {esc(slow_pubkey or '-')}",
+        f"🧩 <b>Pub key</b>    : <code>{esc(slow_pubkey or '-')}</code>",
         "──────────────────────────",
         f"🔐 <b>SSH WS</b>  : {esc(host)}:80@{esc(u)}:{esc(p)}",
         f"🔐 <b>SSH TLS</b> : {esc(host)}:443@{esc(u)}:{esc(p)}",
         f"🔐 <b>SSH UDP</b> : {esc(host)}:1-65535@{esc(u)}:{esc(p)}",
         f"🔐 <b>SSH SLOW DNS</b> : {esc(slow_line)}", "",
-        f"🧩 <b>PAYLOAD WS</b> : {esc(payload_ws)}", "",
-        f"🧩 <b>PAYLOAD TLS</b> : {esc(payload_tls)}", "",
+        f"🧩 <b>PAYLOAD WS</b> : <code>{esc(payload_ws)}</code>", "",
+        f"🧩 <b>PAYLOAD TLS</b> : <code>{esc(payload_tls)}</code>", "",
         f"┌────────────────────────",
         f"│ <b>Durasi</b>    : {esc(dl)}",
         f"│ <b>Dibuat</b>    : {created_fmt}",
@@ -1733,6 +1734,12 @@ async def cb(u,c):
         except: pass
         return
 
+    if d == "channel":
+        try:
+            await q.answer("📢 Channel belum tersedia.", show_alert=True)
+        except: pass
+        return
+
     if d == "admin|server_status":
         if not is_owner(uid): return
         lines = ["<blockquote>", "🌐 <b>STATUS SERVER REAL-TIME</b>", "───────────────────────", ""]
@@ -1742,7 +1749,7 @@ async def cb(u,c):
             ok, ms = await asyncio.to_thread(server_realtime_status, k)
             state = f"🟢 ONLINE • {ms} ms" if ok else "🔴 OFFLINE"
             lines += [f"🖥️ {srv.get('name','-')}", f"└ Status: <b>{state}</b>", ""]
-        lines += ["───────────────────────", "</blockquote>"]
+        lines += ["</blockquote>"]
         try:
             await q.edit_message_text("\n".join(lines), reply_markup=InlineKeyboardMarkup([[B("🔄 Refresh","admin|server_status",style="success")],[B("🔙 Kembali","menu|main",style="danger")]]), parse_mode="HTML")
         except: pass
@@ -1759,7 +1766,7 @@ async def cb(u,c):
             lines.append(f"├ Limit IP      : <b>{ip_l} IP</b>" if ip_l else "├ Limit IP      : <b>❌ Belum diisi</b>")
             lines.append(f"╰ Slot Server  : <b>{sm}</b>" if sm else "╰ Slot Server  : <b>❌ Belum diisi</b>")
             lines.append("")
-        lines += ["───────────────────────","</blockquote>"]
+        lines += ["</blockquote>"]
         rows = []; ks = list(SERVERS.keys())
         for i in range(0,len(ks),2):
             row = []
@@ -1850,7 +1857,7 @@ async def cb(u,c):
         if not is_owner(uid): return
         all_servers = SERVERS
         if not all_servers:
-            try: await q.edit_message_text("<blockquote>🚫 <b>HAPUS SERVER</b>\n───────────────────────\n\n⚠️ Tidak ada server.\n───────────────────────\n</blockquote>",
+            try: await q.edit_message_text("<blockquote>🚫 <b>HAPUS SERVER</b>\n───────────────────────\n\n⚠️ Tidak ada server.\n</blockquote>",
                 reply_markup=InlineKeyboardMarkup([[B("🔙 Kembali","admin|srv",style="danger")]]),parse_mode="HTML")
             except: pass
             return
@@ -1859,7 +1866,7 @@ async def cb(u,c):
             icon = "➕" if is_local_server(k) else "🔌"
             rows.append([B(f"{icon} {v.get('name','-')}",f"srv_del|{k}",style="danger")])
         rows.append([B("🔙 Kembali","admin|srv",style="danger")])
-        try: await q.edit_message_text("<blockquote>🚫 <b>HAPUS SERVER</b>\n───────────────────────\n\nPilih server:\n───────────────────────\n</blockquote>",
+        try: await q.edit_message_text("<blockquote>🚫 <b>HAPUS SERVER</b>\n───────────────────────\n\nPilih server yang ingin di hapus\n</blockquote>",
             reply_markup=InlineKeyboardMarkup(rows),parse_mode="HTML")
         except: pass
         return
@@ -1952,16 +1959,24 @@ async def cb(u,c):
             bw = s["bw"]; bws = f"{bw:.0f}" if bw >= 1 else f"{bw:.1f}"
             svr_parts.append(f"├ {s['name']}{tag}\n│ ├ Qouta  : <b>{bws}/{s['quota']}</b>\n│ ├ Slot   : <b>{s['used']}/{s['max']}</b>\n│ ╰ Status : <b>{s['status']}</b>")
         svr_txt = "\n".join(svr_parts)
+        accs = load_json(ACCOUNTS_FILE,{})
+        cnt_ssh = sum(1 for a in accs.values() if a.get("proto","ssh") == "ssh")
+        cnt_trojan = sum(1 for a in accs.values() if a.get("proto") == "trojan")
+        cnt_vmess = sum(1 for a in accs.values() if a.get("proto") == "vmess")
+        cnt_vless = sum(1 for a in accs.values() if a.get("proto") == "vless")
         txt = ("<blockquote>⚙️ <b>PENGATURAN</b>\n───────────────────────\n"
             f"👥 Total User : <b>{us['total']}</b>\n"
-            f"   Total Akun : <b>{count_accounts()}</b>\n\n"
+            f" 📁 Total akun SSH : {cnt_ssh}\n"
+            f" 📁 Total akun Trojan : {cnt_trojan}\n"
+            f" 📁 Total akun Vmess : {cnt_vmess}\n"
+            f" 📁 Total akun Vless : {cnt_vless}\n\n"
             "📈 <b>PENGHASILAN</b>\n"
             f"├ Hari Ini   : <b>{rupiah(inc['hari'])}</b>\n├ Minggu Ini : <b>{rupiah(inc['minggu'])}</b>\n"
             f"├ Bulan Ini  : <b>{rupiah(inc['bulan'])}</b>\n└ Total      : <b>{rupiah(inc['total'])}</b>\n\n"
             "👤 <b>JUMLAH USER</b>\n"
             f"├ Hari Ini   : <b>{us['hari']}</b>\n├ Minggu Ini : <b>{us['minggu']}</b>\n"
             f"├ Bulan Ini  : <b>{us['bulan']}</b>\n└ Total      : <b>{us['total']}</b>\n\n"
-            "📡 <b>STATUS VPS</b>\n" f"{svr_txt}\n───────────────────────\n</blockquote>")
+            "📡 <b>STATUS VPS</b>\n" f"{svr_txt}\n</blockquote>")
         try: await q.edit_message_text(txt,reply_markup=kb_admin(),parse_mode="HTML")
         except: pass
         return
@@ -1974,9 +1989,9 @@ async def cb(u,c):
         ks.sort(key=lambda k: users[k].get("last_seen",""),reverse=True)
         tot = len(ks); per = 10; tp = max(1,(tot+per-1)//per)
         pg = max(0,min(pg,tp-1)); ch = ks[pg*per:(pg+1)*per]
-        lines = ["<blockquote>","👤 <b>Pengguna</b>","──────────────────────",f"Total: <b>{tot}</b>",""]
+        lines = ["<blockquote>","👤 <b>PENGGUNA</b>","──────────────────────",f"Total: <b>{tot}</b>",""]
         for i,k in enumerate(ch,start=pg*per+1): lines.append(f"{i}. 👤 {users[k].get('first_name') or '-'}")
-        lines += ["","──────────────────────",f"Hal {pg+1}/{tp}","──────────────────────","</blockquote>"]
+        lines += ["",f"Halaman {pg+1}/{tp}","</blockquote>"]
         rows = []
         for k in ch:
             n = users.get(k,{}).get("first_name") or "-"
@@ -2011,7 +2026,7 @@ async def cb(u,c):
     if d == "admin|bc":
         if not is_owner(uid): return
         c.user_data["bc_wait"] = True
-        try: await q.edit_message_text("<blockquote>📢 <b>BROADCAST PENGUMUMAN</b>\n\nSilakan ketik pesan pengumuman yang ingin dikirim ke semua user.\n\n<i>Pesan akan dikirim ke seluruh user bot (kecuali yang memblokir bot).</i></blockquote>",
+        try: await q.edit_message_text("<blockquote>📢 <b>BROADCAST PENGUMUMAN</b>\n────────────────────────\nSilakan ketik pesan pengumuman yang ingin dikirim ke semua user.</blockquote>",
             reply_markup=InlineKeyboardMarkup([[B("❌ Batal","admin|menu",style="danger")]]),parse_mode="HTML")
         except: pass
         return
@@ -2116,10 +2131,10 @@ async def cb(u,c):
                 if (ed-datetime.now().date()).days < 0: continue
             except: continue
             accs.append(a)
-        hdr = ["<blockquote>","💻 <b>AKUN SAYA</b>","───────────────────────","",
+        hdr = ["<blockquote>","📁 <b>DAFTAR AKUN SAYA</b>","───────────────────────","",
                f"📭 Total Akun : <b>{len(accs)}</b>",""]
         if not accs: hdr += ["Belum ada akun premium.","Silakan buat akun terlebih dahulu.",""]
-        hdr += ["───────────────────────","</blockquote>"]
+        hdr += ["</blockquote>"]
         if not accs:
             rows = [[B("➕ BUAT AKUN","buat_akun",style="primary")],[B("🔙 KEMBALI","menu|main",style="danger")]]
         else:
