@@ -993,7 +993,7 @@ def kb_dash(uid):
     rows = [[B("➕  BUAT AKUN","buat_akun",style="primary"),B("⌛  TRIAL AKUN","trial_akun",style="primary")],
         [B("🔄 PERPANJANG AKUN","perpanjang_akun",style="primary")],
         [B("💰 TOPUP SALDO","isi_saldo",style="primary"),B("📁 AKUN SAYA","my_accs",style="primary")],
-        [B("♻️ REFRESH","refresh",style="primary")]]
+        [B("🌐 STATUS SERVER","status_server",style="primary"),B("♻️ REFRESH","refresh",style="primary")]]
     rows.append([B("⚙️ PENGATURAN","admin|menu",style="danger")])
     return InlineKeyboardMarkup(rows)
 def kb_saldo():
@@ -1078,12 +1078,11 @@ def dash_text(user, uid):
               f"╰ Kuota Trial     : <b>{trial_left(uid)}x Hari</b>","","───────────────────────","</blockquote>"]
     return "\n".join(lines)
 def pilih_layanan_text():
-    return "<blockquote>\n🌐 <b>PILIH LAYANAN VPN</b>\n───────────────────────\n<b>Silakan pilih protocol akun yang ingin di buat</b>\n───────────────────────\n</blockquote>"
-def ssh_server_text():
+    return "<blockquote>\n🌐 <b>PILIH LAYANAN VPN</b>\n───────────────────────\n<b>Silakan pilih protocol akun yang ingin di buat</b>\n</blockquote>"
+def _server_list_text(title, status_mode="ssh"):
     a = get_active_servers()
     if not a: return "<blockquote>⚠️ <b>Belum ada server</b></blockquote>"
-    lines = ["<blockquote>","<b>🌐 DAFTAR SERVER SSH</b>","─────────────────────────","",
-             "<b>Silakan pilih server yang ingin di buat</b>",""]
+    lines = ["<blockquote>",f"<b>🌐 {title}</b>","─────────────────────────",""]
     for i,(k,s) in enumerate(a.items(),1):
         used,mx = get_slot_info(k)
         status = "🟢 Tersedia" if used < mx else "🔴 Penuh"
@@ -1094,17 +1093,37 @@ def ssh_server_text():
                   f"╰ Slot Tersedia : <b>{used}/{mx} {status}</b>",""]
     lines += ["─────────────────────────","</blockquote>"]
     return "\n".join(lines)
+def ssh_server_text():
+    return _server_list_text("DAFTAR SERVER SSH")
 def xray_server_text(proto):
-    a = get_active_servers()
-    if not a: return "<blockquote>⚠️ <b>Belum ada server</b></blockquote>"
     t = {"vmess":"VMESS","vless":"VLESS","trojan":"TROJAN"}.get(proto,proto.upper())
-    lines = ["<blockquote>",f"<b>💻 {t}</b>","─────────────────────────",""]
+    return _server_list_text(f"DAFTAR SERVER {t}", "xray")
+
+def realtime_server_status():
+    a = get_active_servers()
+    lines = ["<blockquote>","🌐 <b>STATUS SERVER REAL-TIME</b>","───────────────────────",""]
+    if not a:
+        lines += ["⚠️ <b>Belum ada server</b>","</blockquote>"]
+        return "\n".join(lines)
     for k,s in a.items():
-        used,mx = get_slot_info(k); cek = "✅" if max(0,mx-used)>0 else "❌"
-        lines += [f"◆ {s['name']}",f"├ Harga Harian  : <b>{rupiah(s.get('price_day',0))}</b>",
-                  f"├ Harga Bulanan : <b>{rupiah(s.get('price_month',0))}</b>",
-                  f"├ Limit IP      : {s.get('ip_limit',1)} IP",f"╰ Slot Tersedia : <b>{used}/{mx} {cek}</b>","",""]
-    lines += ["─────────────────────────","</blockquote>"]
+        name = s.get("name","-")
+        host = (s.get("ssh_host") or "").strip()
+        # Server lokal memakai pemeriksaan lokal; server remote harus punya ssh_host
+        start = time.monotonic()
+        ok = False
+        if not host or host in ("127.0.0.1","localhost"):
+            try:
+                r = subprocess.run(["true"],capture_output=True,timeout=3)
+                ok = r.returncode == 0
+            except:
+                ok = False
+        else:
+            code, _, _ = ssh_run("echo PING_OK", k, timeout=8)
+            ok = code == 0
+        ms = max(1, round((time.monotonic()-start)*1000))
+        status = f"🟢 ONLINE • {ms} ms" if ok else "🔴 OFFLINE"
+        lines += [f"🖥️ <b>{name}</b>",f"   └ Status: <b>{status}</b>",""]
+    lines += ["───────────────────────","</blockquote>"]
     return "\n".join(lines)
 def saldo_text(uid, nom=""):
     return (f"<blockquote>💰 <b>Masukkan jumlah nominal topup saldo</b>\n\n"
@@ -1425,6 +1444,16 @@ async def cb(u,c):
         try: await q.message.delete()
         except: pass
         try: await chat.send_message(dash_text(u.effective_user,uid),reply_markup=kb_dash(uid),parse_mode="HTML")
+        except: pass
+        return
+
+    if d == "status_server":
+        try:
+            await q.edit_message_text(realtime_server_status(),
+                reply_markup=InlineKeyboardMarkup([
+                    [B("🔄 CEK LAGI","status_server",style="primary")],
+                    [B("🔙 KEMBALI","menu|main",style="danger")]
+                ]),parse_mode="HTML")
         except: pass
         return
 
