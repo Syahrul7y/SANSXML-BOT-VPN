@@ -151,7 +151,19 @@ _pkg_install(){
 }
 run_step pkg 'Memasang paket dasar' _pkg_install || exit 1
 run_step telegram 'Memasang Telegram API' bash -c 'pip3 install --break-system-packages --upgrade "python-telegram-bot>=21.5" requests qrcode pillow >/dev/null 2>&1 || pip3 install --upgrade "python-telegram-bot>=21.5" requests qrcode pillow >/dev/null 2>&1' || exit 1
-run_step_sh dropbear 'Memasang Dropbear' 'mkdir -p /etc/dropbear; if [ -f /etc/default/dropbear ]; then sed -i "s/^NO_START=.*/NO_START=0/" /etc/default/dropbear; sed -i "s/^DROPBEAR_PORT=.*/DROPBEAR_PORT=109/" /etc/default/dropbear; grep -q "^DROPBEAR_PORT=" /etc/default/dropbear || echo "DROPBEAR_PORT=109" >> /etc/default/dropbear; sed -i "/^DROPBEAR_EXTRA_ARGS=/d" /etc/default/dropbear; echo DROPBEAR_EXTRA_ARGS="-p 109" >> /etc/default/dropbear; fi; systemctl daemon-reload >/dev/null 2>&1 || true' || exit 1
+run_step_sh dropbear 'Memasang Dropbear' 'mkdir -p /etc/dropbear; if [ -f /etc/default/dropbear ]; then sed -i "s/^NO_START=.*/NO_START=0/" /etc/default/dropbear; sed -i "s/^DROPBEAR_PORT=.*/DROPBEAR_PORT=109/" /etc/default/dropbear; grep -q "^DROPBEAR_PORT=" /etc/default/dropbear || echo "DROPBEAR_PORT=109" >> /etc/default/dropbear; sed -i "/^DROPBEAR_EXTRA_ARGS=/d" /etc/default/dropbear; echo "DROPBEAR_EXTRA_ARGS=\"-p 109\"" >> /etc/default/dropbear; fi; cat > /etc/systemd/system/dropbear.service << "DROPBEARSVC"
+[Unit]
+Description=Dropbear SSH Server
+After=network.target
+[Service]
+Type=simple
+ExecStart=/usr/sbin/dropbear -F -E -p 109
+Restart=always
+RestartSec=2
+[Install]
+WantedBy=multi-user.target
+DROPBEARSVC
+systemctl daemon-reload; systemctl unmask dropbear.service 2>/dev/null || true; systemctl enable dropbear.service; systemctl restart dropbear.service; sleep 1; systemctl is-active --quiet dropbear.service || { systemctl --no-pager --full status dropbear.service >&2 || true; exit 1; }' || exit 1
 run_step_sh nginx 'Memasang Nginx' 'cat > /etc/nginx/sites-available/sansxml << "NGINXEOF"
 server {
     listen 127.0.0.1:8081;
@@ -313,7 +325,7 @@ rc=$?
 finish_or_fail udpgw "$rc"
 [ "$rc" -eq 0 ] || exit 1
 run_step_sh firewall 'Mengatur firewall' 'ufw default allow incoming >/dev/null 2>&1; ufw default allow outgoing >/dev/null 2>&1; for p in 22 80 109 443 8080 8443 8444 8445 10001 10002 10003 10004 10005 10006 10007; do ufw allow $p/tcp >/dev/null 2>&1; done; ufw allow 7300/udp >/dev/null 2>&1; ufw allow 1:65535/udp >/dev/null 2>&1; ufw --force enable >/dev/null 2>&1' || exit 1
-run_step_sh services 'Menjalankan layanan VPN' 'systemctl daemon-reload; systemctl enable ws-ssh ws-ssh-alt stunnel4 dropbear nginx haproxy >/dev/null 2>&1; systemctl restart ws-ssh ws-ssh-alt stunnel4 dropbear nginx haproxy; systemctl enable dropbear >/dev/null 2>&1; systemctl restart dropbear >/dev/null 2>&1; [ -f /usr/bin/badvpn-udpgw ] && systemctl enable udpgw >/dev/null 2>&1 && systemctl restart udpgw; sleep 2' || exit 1
+run_step_sh services 'Menjalankan layanan VPN' 'systemctl daemon-reload; systemctl enable ws-ssh ws-ssh-alt stunnel4 nginx haproxy >/dev/null 2>&1; systemctl restart ws-ssh ws-ssh-alt stunnel4 nginx haproxy; systemctl enable dropbear.service >/dev/null 2>&1; systemctl restart dropbear.service >/dev/null 2>&1; systemctl is-active --quiet dropbear.service || exit 1; [ -f /usr/bin/badvpn-udpgw ] && systemctl enable udpgw >/dev/null 2>&1 && systemctl restart udpgw; sleep 2' || exit 1
 
 DOMAIN="id-sansvpnstore.cloud"
 
@@ -1061,8 +1073,8 @@ def kb_dash(uid):
         [B("➕ PERPANJANG AKUN","perpanjang_akun",style="primary")],
         [B("💰 TOPUP SALDO","isi_saldo",style="primary"),B("📁 AKUN SAYA","my_accs",style="primary")],
         [B("🌐 STATUS SERVER","admin|server_status",style="primary")],
-        [B("♻️ REFRESH","refresh",style="primary")],
-        [B("📢 CHANNEL",url="https://t.me/infoovpnnnn",style="primary"),B("☎️ ADMIN",url="tg://user?id=6144358600",style="primary")]]
+        [B("📢 CHANNEL",url="https://t.me/infoovpnnnn",style="primary"),B("☎️ ADMIN",url="tg://user?id=6144358600",style="primary")],
+        [B("♻️ REFRESH","refresh",style="danger")]]
     if is_owner(uid):
         rows.append([B("⚙️ PENGATURAN","admin|menu",style="danger")])
     return InlineKeyboardMarkup(rows)
@@ -1121,7 +1133,7 @@ def kb_admin():
     return InlineKeyboardMarkup([
         [B("🌐 DAFTAR SERVER","admin|srv",style="primary")],
         [B("👤 Pengguna","admin|users|0",style="primary"),B("📢 Broadcast","admin|bc",style="primary")],
-        [B("🔄 Backup","admin|backup",style="primary"),B("💻 VPS","admin|vps",style="primary")],
+        [B("🔄 Backup","admin|backup",style="primary")],
         [B("🔙 Kembali","menu|main",style="danger")]])
 def kb_backup():
     return InlineKeyboardMarkup([
@@ -2118,11 +2130,12 @@ async def cb(u,c):
                 if (ed-datetime.now().date()).days < 0: continue
             except: continue
             accs.append(a)
-        hdr = ["📁 <b>DAFTAR AKUN SAYA</b>",
+        hdr = ["<blockquote>","📁 <b>DAFTAR AKUN SAYA</b>",
                "───────────────────────"]
         if not accs:
             hdr += ["Belum ada akun premium",
                     "Silakan buat akun terlebih dahulu."]
+        hdr += ["</blockquote>"]
         if not accs:
             rows = [[B("➕ BUAT AKUN","buat_akun",style="primary")],[B("🔙 KEMBALI","menu|main",style="danger")]]
         else:
