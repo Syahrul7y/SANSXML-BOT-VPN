@@ -152,7 +152,21 @@ def handle(c, a):
                     h += x
             except: pass
             k = None
-            for l in h.split(b"\r\n"):
+            for l in h.split(b"\r\n    if d == "srv_del_list":
+        if not is_owner(uid): return
+        if not SERVERS:
+            try: await q.edit_message_text("<blockquote>🚫 <b>HAPUS SERVER</b>\n───────────────────────\n\n⚠️ Belum ada server.\n</blockquote>", reply_markup=InlineKeyboardMarkup([[B("🔙 Kembali","admin|srv",style="danger")]]), parse_mode="HTML")
+            except: pass
+            return
+        rows = []
+        for k,v in SERVERS.items():
+            typ = "🔌" if not is_local_server(k) else "➕"
+            rows.append([B(f"{typ} {v.get('name','-')}",f"srv_del|{k}",style="danger")])
+        rows.append([B("🔙 Kembali","admin|srv",style="danger")])
+        try: await q.edit_message_text("<blockquote>🚫 <b>HAPUS SERVER</b>\n───────────────────────\n\nPilih server:</blockquote>", reply_markup=InlineKeyboardMarkup(rows), parse_mode="HTML")
+        except: pass
+        return
+    if d.startswith("srv_del|"):
                 if l.lower().startswith(b"sec-websocket-key:"):
                     k = l.split(b":",1)[1].strip(); break
             acc = base64.b64encode(hashlib.sha1(k + b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest()) if k else b"s3pPLMBiTxaQ9kYGzzhZRbK+xOo="
@@ -361,121 +375,6 @@ XRAYSVC
 
 # Restore SSH/WS/SSL services after certificate setup
 ( systemctl daemon-reload; systemctl enable ws-ssh ws-ssh-alt stunnel4 >/dev/null 2>&1; systemctl restart ws-ssh ws-ssh-alt stunnel4 ) & spin $! "Start SSH/SSL services"
-
-
-# 4b. SLOWDNS / DNSTT
-# Keep the existing bot/account UI unchanged. This block only installs and
-# starts the real DNSTT server and writes its metadata for bot.py to read.
-(
-  set -e
-  DNSTT_DIR=/etc/dnstt
-  DNSTT_BIN=/usr/local/bin/dnstt-server
-  DNSTT_PORT=5300
-  DNSTT_TUNNEL_DOMAIN="slow.${DOMAIN}"
-  DNSTT_NS_HOST="ns.${DOMAIN}"
-  BUILD_LOG=/tmp/sansxml-dnstt-build.log
-  KEY_LOG=/tmp/sansxml-dnstt-keygen.log
-  mkdir -p "$DNSTT_DIR"
-  chmod 700 "$DNSTT_DIR"
-  : > "$BUILD_LOG"
-  : > "$KEY_LOG"
-
-  # DNSTT is written in Go. Install the distro compiler when it is missing.
-  if ! command -v go >/dev/null 2>&1; then
-    apt-get update -y >>"$BUILD_LOG" 2>&1
-    apt-get install -y --no-install-recommends golang-go git ca-certificates >>"$BUILD_LOG" 2>&1
-  fi
-  command -v go >/dev/null 2>&1 || { echo "Go compiler tidak tersedia. Lihat $BUILD_LOG" >&2; exit 1; }
-  command -v git >/dev/null 2>&1 || { echo "Git tidak tersedia. Lihat $BUILD_LOG" >&2; exit 1; }
-
-  # Build only when the binary is not already usable.
-  if [ ! -x "$DNSTT_BIN" ] || ! "$DNSTT_BIN" -h >/dev/null 2>&1; then
-    rm -rf /tmp/dnstt-src
-    if ! git clone --depth=1 https://github.com/Mygod/dnstt.git /tmp/dnstt-src >>"$BUILD_LOG" 2>&1; then
-      echo "Gagal mengambil source DNSTT. Lihat $BUILD_LOG" >&2
-      exit 1
-    fi
-    cd /tmp/dnstt-src/dnstt-server
-    if ! CGO_ENABLED=0 go build -trimpath -o "$DNSTT_BIN" . >>"$BUILD_LOG" 2>&1; then
-      echo "Gagal compile DNSTT. Lihat $BUILD_LOG" >&2
-      exit 1
-    fi
-    chmod 0755 "$DNSTT_BIN"
-    rm -rf /tmp/dnstt-src
-  fi
-
-  # Never replace an existing private key. Generate a pair only when neither
-  # key exists, so reinstalling the SC cannot silently invalidate clients.
-  if [ ! -s "$DNSTT_DIR/server.key" ] && [ ! -s "$DNSTT_DIR/server.pub" ]; then
-    if ! "$DNSTT_BIN" -gen-key \
-      -privkey-file "$DNSTT_DIR/server.key" \
-      -pubkey-file "$DNSTT_DIR/server.pub" >>"$KEY_LOG" 2>&1; then
-      echo "Gagal membuat keypair DNSTT. Lihat $KEY_LOG" >&2
-      exit 1
-    fi
-  fi
-
-  # The bot must never advertise an empty/invalid key.
-  [ -s "$DNSTT_DIR/server.key" ] || { echo "DNSTT private key tidak ditemukan" >&2; exit 1; }
-  [ -s "$DNSTT_DIR/server.pub" ] || { echo "DNSTT public key tidak ditemukan" >&2; exit 1; }
-  SLOW_PUBKEY="$(grep -Eo '[0-9a-fA-F]{64}' "$DNSTT_DIR/server.pub" | head -n1 || true)"
-  echo "$SLOW_PUBKEY" | grep -Eq '^[0-9a-fA-F]{64}$' || { echo "DNSTT public key tidak valid" >&2; exit 1; }
-  chmod 600 "$DNSTT_DIR/server.key"
-  chmod 644 "$DNSTT_DIR/server.pub"
-
-  cat > "$DNSTT_DIR/config" << EOF
-SLOW_PORT=$DNSTT_PORT
-SLOW_TUNNEL_DOMAIN=$DNSTT_TUNNEL_DOMAIN
-SLOW_NS_HOST=$DNSTT_NS_HOST
-SLOW_DNS_AUTH_NS=$DNSTT_NS_HOST
-SLOW_PUBKEY=$SLOW_PUBKEY
-EOF
-  chmod 600 "$DNSTT_DIR/config"
-
-  # DNSTT listens on the unprivileged local port; external UDP/53 is redirected
-  # to it. Existing SSH/Xray/HTTP ports are untouched.
-  cat > /etc/systemd/system/dnstt-server.service << EOF
-[Unit]
-Description=SANSXML SlowDNS DNSTT Server
-After=network-online.target
-Wants=network-online.target
-
-[Service]
-Type=simple
-User=root
-ExecStart=$DNSTT_BIN -udp :$DNSTT_PORT -privkey-file $DNSTT_DIR/server.key $DNSTT_TUNNEL_DOMAIN 127.0.0.1:22
-Restart=always
-RestartSec=3
-LimitNOFILE=65535
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-  systemctl daemon-reload
-  systemctl enable dnstt-server >/dev/null 2>&1
-  systemctl restart dnstt-server
-  sleep 1
-  if ! systemctl is-active --quiet dnstt-server; then
-    echo "DNSTT gagal berjalan. Lihat: journalctl -u dnstt-server -n 50 --no-pager" >&2
-    systemctl --no-pager --full status dnstt-server >&2 || true
-    exit 1
-  fi
-
-  # Forward real DNS traffic from UDP/53 to DNSTT/5300.
-  iptables -C INPUT -p udp --dport "$DNSTT_PORT" -j ACCEPT 2>/dev/null || \
-    iptables -I INPUT -p udp --dport "$DNSTT_PORT" -j ACCEPT 2>/dev/null || true
-  iptables -t nat -C PREROUTING -p udp --dport 53 -j REDIRECT --to-ports "$DNSTT_PORT" 2>/dev/null || \
-    iptables -t nat -I PREROUTING -p udp --dport 53 -j REDIRECT --to-ports "$DNSTT_PORT" 2>/dev/null || true
-
-  # Save a human-readable DNS setup note; no bot/UI content is changed here.
-  cat > "$DNSTT_DIR/dns-records.txt" << EOF
-A    $DNSTT_NS_HOST    <IP-VPS>
-NS   $DNSTT_TUNNEL_DOMAIN    $DNSTT_NS_HOST
-EOF
-  echo "$SLOW_PUBKEY" > "$DNSTT_DIR/server.pub.txt"
-  chmod 644 "$DNSTT_DIR/server.pub.txt" "$DNSTT_DIR/dns-records.txt"
-) & spin $! "Install SlowDNS / DNSTT"
 
 # 5. BANNER
 # Backup files that this installer modifies so EXIT can restore them.
@@ -911,8 +810,9 @@ def add_trx(uid,name,un,tipe,jumlah,ket=""):
 def get_stats(uid=None):
     d = load_json(TRX_FILE,[])
     if uid: d = [t for t in d if t["user_id"]==uid]
-    week = (datetime.now()-timedelta(days=7)).strftime("%Y-%m-%d"); month = datetime.now().strftime("%Y-%m")
-    return {"minggu":sum(1 for t in d if t["waktu"][:10]>=week and t["tipe"]=="buat_akun"),
+    today = datetime.now().strftime("%Y-%m-%d"); week = (datetime.now()-timedelta(days=7)).strftime("%Y-%m-%d"); month = datetime.now().strftime("%Y-%m")
+    return {"hari":sum(1 for t in d if t["waktu"].startswith(today) and t["tipe"]=="buat_akun"),
+            "minggu":sum(1 for t in d if t["waktu"][:10]>=week and t["tipe"]=="buat_akun"),
             "bulan":sum(1 for t in d if t["waktu"].startswith(month) and t["tipe"]=="buat_akun"),
             "total":sum(1 for t in d if t["tipe"]=="buat_akun")}
 def get_income():
@@ -947,6 +847,20 @@ def get_server_status():
                   "quota":int(s.get("quota_gb",700) or 700),"bw":get_bandwidth_gb(k),
                   "key":k,"complete":is_server_complete(s)})
     return r
+
+def server_realtime_status(key):
+    s = SERVERS.get(key, {})
+    host = (s.get("ssh_host") or "127.0.0.1").strip()
+    try: port = int(s.get("ssh_port",22) or 22)
+    except: port = 22
+    if host in ("", "localhost"): host = "127.0.0.1"
+    t0 = time.perf_counter()
+    try:
+        with socket.create_connection((host, port), timeout=4):
+            ms = max(0, int(round((time.perf_counter()-t0)*1000)))
+        return True, ms
+    except Exception:
+        return False, None
 
 def backup_config_text():
     c = load_backup_conf(); g = c.get("GH_TOKEN","") or ""
@@ -1106,7 +1020,7 @@ def reset_backup(keep=True):
 
 def kb_dash(uid):
     rows = [[B("➕  BUAT AKUN","buat_akun",style="primary"),B("⌛  TRIAL AKUN","trial_akun",style="primary")],
-        [B("🔄 PERPANJANG AKUN","perpanjang_akun",style="primary")],
+        [B("➕ PERPANJANG AKUN","perpanjang_akun",style="primary")],
         [B("💰 TOPUP SALDO","isi_saldo",style="primary"),B("📁 AKUN SAYA","my_accs",style="primary")],
         [B("♻️ REFRESH","refresh",style="primary")]]
     rows.append([B("⚙️ PENGATURAN","admin|menu",style="danger")])
@@ -1164,9 +1078,9 @@ def kb_xray_srv(proto):
     return InlineKeyboardMarkup(r)
 def kb_admin():
     return InlineKeyboardMarkup([
-        [B("⚙️ Kelola VPN","admin|srv",style="primary"),B("👤 Pengguna","admin|users|0",style="primary")],
-        [B("📢 Broadcast","admin|bc",style="primary"),B("🔄 Backup","admin|backup",style="primary")],
-        [B("💻 VPS","admin|vps",style="primary")],
+        [B("🌐 DAFTAR SERVER","admin|srv",style="primary"),B("🌐 STATUS SERVER","admin|server_status",style="primary")],
+        [B("👤 Pengguna","admin|users|0",style="primary"),B("📢 Broadcast","admin|bc",style="primary")],
+        [B("🔄 Backup","admin|backup",style="primary"),B("💻 VPS","admin|vps",style="primary")],
         [B("🔙 Kembali","menu|main",style="danger")]])
 def kb_backup():
     return InlineKeyboardMarkup([
@@ -1182,45 +1096,45 @@ def kb_soon(p): return InlineKeyboardMarkup([[B("🔙 KEMBALI","pilih_layanan",s
 def dash_text(user, uid):
     un = f"@{user.username}" if user.username else "-"
     role = "Owner" if is_owner(uid) else "Member"
-    st = get_stats(uid); tu = len(load_json(USERS_FILE,{}))
-    lines = ["<blockquote>","💻 <b>SANSXML VPN STORE</b>","───────────────────────","👤 <b>Profil</b>"]
+    st = get_stats(); inc = get_income(); tu = len(load_json(USERS_FILE,{}))
+    lines = ["<blockquote>","🤖 <b>SANSXML VPN STORE</b>","───────────────────────","👤 <b>Profil</b>"]
     lines += [f"├ User Telegram  : {un}",f"├ Chat ID        : <code>{uid}</code>",
               f"├ Keanggotaan    : {role}",f"├ Total Pengguna : <b>{tu}</b>",
-              f"╰ 💰 Saldo VPN  : <b>{rupiah(get_bal(uid))}</b>","","🌍 <b>Info Global</b>",
+              f"╰ 💰 Saldo VPN  : <b>{rupiah(get_bal(uid))}</b>","","📊 <b>Info Transaksi global</b>",
               f"├ Minggu Ini     : <b>{st['minggu']} Akun</b>",f"├ Bulan Ini      : <b>{st['bulan']} Akun</b>",
-              f"╰ Keseluruhan    : <b>{st['total']} Akun</b>","","🌐 <b>Informasi</b>",
+              f"╰ Keseluruhan    : <b>{st['total']} Akun</b>","","🖥️ <b>Informasi</b>",
               f"├ Server Tersedia : <b>{len(get_active_servers())} Server</b>",
+              f"├ Hari ini : <b>{st['hari']} Akun</b>",
+              f"├ Bulan ini : <b>{st['bulan']} Akun</b>",
+              f"├ Total Transaksi : <b>{rupiah(inc['total'])}</b>",
               f"╰ Kuota Trial     : <b>{trial_left(uid)}x Hari</b>","","───────────────────────","</blockquote>"]
     return "\n".join(lines)
 def pilih_layanan_text():
-    return "<blockquote>\n🌐 <b>PILIH LAYANAN VPN</b>\n───────────────────────\n<b>Silakan pilih protocol akun yang ingin di buat</b>\n───────────────────────\n</blockquote>"
-def ssh_server_text():
+    return "<blockquote>\n🌐 <b>PILIH LAYANAN VPN</b>\n───────────────────────\nSilakan pilih protocol akun yang ingin di buat</blockquote>"
+
+def _server_list_text(title):
     a = get_active_servers()
-    if not a: return "<blockquote>⚠️ <b>Belum ada server</b></blockquote>"
-    lines = ["<blockquote>","<b>🌐 DAFTAR SERVER SSH</b>","─────────────────────────","",
-             "<b>Silakan pilih server yang ingin di buat</b>",""]
-    for i,(k,s) in enumerate(a.items(),1):
-        used,mx = get_slot_info(k)
-        status = "🟢 Tersedia" if used < mx else "🔴 Penuh"
-        lines += [f"<b>[{i}]</b>",f"◆ {s.get('name','-')}",
+    if not a:
+        return "<blockquote>⚠️ <b>Belum ada server</b></blockquote>"
+    lines = ["<blockquote>", f"🌐 <b>{title}</b>", "─────────────────────────", ""]
+    for i, (k, s) in enumerate(a.items(), 1):
+        used, mx = get_slot_info(k)
+        cek = "🟢 Tersedia" if max(0, mx-used) > 0 else "🔴 Penuh"
+        lines += [f"[{i}]", f"◆ {s.get('name','-')}",
                   f"├ Harga Harian  : <b>{rupiah(s.get('price_day',0))}</b>",
                   f"├ Harga Bulanan : <b>{rupiah(s.get('price_month',0))}</b>",
                   f"├ Limit IP      : {s.get('ip_limit',1)} IP",
-                  f"╰ Slot Tersedia : <b>{used}/{mx} {status}</b>",""]
-    lines += ["─────────────────────────","</blockquote>"]
+                  f"╰ Slot Tersedia : <b>{used}/{mx} {cek}</b>", ""]
+    lines += ["─────────────────────────", "</blockquote>"]
     return "\n".join(lines)
+
+def ssh_server_text():
+    return _server_list_text("DAFTAR SERVER SSH")
+
 def xray_server_text(proto):
-    a = get_active_servers()
-    if not a: return "<blockquote>⚠️ <b>Belum ada server</b></blockquote>"
-    t = {"vmess":"VMESS","vless":"VLESS","trojan":"TROJAN"}.get(proto,proto.upper())
-    lines = ["<blockquote>",f"<b>💻 {t}</b>","─────────────────────────",""]
-    for k,s in a.items():
-        used,mx = get_slot_info(k); cek = "✅" if max(0,mx-used)>0 else "❌"
-        lines += [f"◆ {s['name']}",f"├ Harga Harian  : <b>{rupiah(s.get('price_day',0))}</b>",
-                  f"├ Harga Bulanan : <b>{rupiah(s.get('price_month',0))}</b>",
-                  f"├ Limit IP      : {s.get('ip_limit',1)} IP",f"╰ Slot Tersedia : <b>{used}/{mx} {cek}</b>","",""]
-    lines += ["─────────────────────────","</blockquote>"]
-    return "\n".join(lines)
+    title = {"vmess":"DAFTAR SERVER VMESS", "vless":"DAFTAR SERVER VLESS", "trojan":"DAFTAR SERVER TROJAN"}.get(proto, f"DAFTAR SERVER {proto.upper()}")
+    return _server_list_text(title)
+
 def saldo_text(uid, nom=""):
     return (f"<blockquote>💰 <b>Masukkan jumlah nominal topup saldo</b>\n\n"
             f"Jumlah saldo VPN saat ini: <b>{rupiah(get_bal(uid))}</b>\n\n"
@@ -1244,63 +1158,17 @@ def _local_server_meta():
 def _local_slowdns():
     vals = {}
     try:
-        # Automatic recovery for a fresh VPS: if DNSTT is installed but the
-        # keypair was never created, create it once. Never replace an existing
-        # private key because that would invalidate existing clients.
-        ddir = "/etc/dnstt"
-        dkey = os.path.join(ddir, "server.key")
-        dpub = os.path.join(ddir, "server.pub")
-        dbin = "/usr/local/bin/dnstt-server"
-        if (not os.path.exists(dkey) or os.path.getsize(dkey) == 0) and (not os.path.exists(dpub) or os.path.getsize(dpub) == 0) and os.path.exists(dbin):
-            try:
-                os.makedirs(ddir, exist_ok=True)
-                subprocess.run([dbin, "-gen-key", "-privkey-file", dkey, "-pubkey-file", dpub],
-                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
-                               timeout=15, check=False)
-                try: os.chmod(dkey, 0o600)
-                except: pass
-                try: os.chmod(dpub, 0o644)
-                except: pass
-            except Exception:
-                pass
-
         pth = "/etc/dnstt/config"
         if os.path.exists(pth):
             with open(pth, encoding="utf-8", errors="ignore") as fh:
                 for line in fh:
                     if "=" in line:
-                        k,v = line.rstrip("\n").split("=",1)
-                        vals[k.strip()] = v.strip().strip('"').strip("'")
-        # DNSTT public key is a 64-character hexadecimal value.  Do not require
-        # the file to contain only the key; accept formats such as
-        # "pubkey: <64hex>" as well.
+                        k,v = line.rstrip("\n").split("=",1); vals[k] = v.strip()
         pub = "/etc/dnstt/server.pub"
         if os.path.exists(pub):
-            raw = open(pub, encoding="utf-8", errors="ignore").read()
-            m = re.search(r"(?<![0-9a-fA-F])[0-9a-fA-F]{64}(?![0-9a-fA-F])", raw)
-            if m:
-                vals["SLOW_PUBKEY"] = m.group(0).lower()
-        # Fallback: some installations may store the generated key in config.
-        if not vals.get("SLOW_PUBKEY"):
-            for k,v in vals.items():
-                if "PUB" in k.upper() or "KEY" in k.upper():
-                    m = re.search(r"(?<![0-9a-fA-F])[0-9a-fA-F]{64}(?![0-9a-fA-F])", str(v))
-                    if m:
-                        vals["SLOW_PUBKEY"] = m.group(0).lower()
-                        break
-        # Fallback to the metadata copy created by the installer.
-        if not vals.get("SLOW_PUBKEY"):
-            pubtxt = "/etc/dnstt/server.pub.txt"
-            if os.path.exists(pubtxt):
-                raw = open(pubtxt, encoding="utf-8", errors="ignore").read()
-                m = re.search(r"(?<![0-9a-fA-F])[0-9a-fA-F]{64}(?![0-9a-fA-F])", raw)
-                if m:
-                    vals["SLOW_PUBKEY"] = m.group(0).lower()
-        # Accept either naming convention for the authoritative NS hostname.
-        if not vals.get("SLOW_NS_HOST"):
-            vals["SLOW_NS_HOST"] = vals.get("SLOW_DNS_AUTH_NS") or vals.get("NS_HOST") or ""
-    except Exception:
-        pass
+            key = "".join(open(pub, encoding="utf-8", errors="ignore").read().split())
+            if re.fullmatch(r"[0-9a-fA-F]{64}", key): vals["SLOW_PUBKEY"] = key.lower()
+    except: pass
     return vals
 
 _LOCAL_CITY, _LOCAL_ISP = _local_server_meta()
@@ -1331,29 +1199,12 @@ def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="id_
     slow_port = int(srv.get("slow_port", 5300) or 5300)
     slow_ns = str(srv.get("slow_ns") or "").strip()
     slow_pubkey = str(srv.get("slow_pubkey") or "").strip()
-    # Always inspect the local DNSTT files when this VPS owns the selected
-    # server.  This also works for ID-RMHWEB-04 and any newly added local server.
     if is_local_server(server_key):
         _sd = _local_slowdns()
         slow_port = int(_sd.get("SLOW_PORT", slow_port) or slow_port)
         slow_ns = _sd.get("SLOW_NS_HOST", slow_ns) or slow_ns
         slow_pubkey = _sd.get("SLOW_PUBKEY", slow_pubkey) or slow_pubkey
-    # If the config has no NS hostname but the installer domain is known,
-    # derive the standard DNSTT NS hostname used by this SC.
-    if not slow_ns:
-        base_domain = str(srv.get("domain") or SSH_HOST).strip()
-        if base_domain:
-            slow_ns = "ns." + base_domain
-    # Last live read immediately before rendering the account. This avoids a
-    # stale value when DNSTT finished starting after the bot process started.
-    if is_local_server(server_key):
-        _sd2 = _local_slowdns()
-        if _sd2.get("SLOW_PORT"):
-            try: slow_port = int(_sd2.get("SLOW_PORT"))
-            except: pass
-        slow_ns = _sd2.get("SLOW_NS_HOST", slow_ns) or slow_ns
-        slow_pubkey = _sd2.get("SLOW_PUBKEY", slow_pubkey) or slow_pubkey
-    slow_line = f"{slow_ns}:{slow_port}@{u}:{p}" if slow_ns and re.fullmatch(r"[0-9a-fA-F]{64}", slow_pubkey) else "-"
+    slow_line = f"{slow_ns}:{slow_port}@{u}:{p}" if slow_ns and slow_pubkey else "-"
     payload_ws = "GET /cdn-cgi/trace HTTP/1.1[crlf]Host: [host][crlf][crlf]GET-RAY / HTTP/1.1[crlf]Host: [host][crlf]Connection: Upgrade[crlf]User-Agent: [ua][crlf]Upgrade: websocket[crlf][crlf]"
     payload_tls = "GET / HTTP/1.1[crlf]Host: [host][crlf]User-Agent: [ua][crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf][crlf]"
     esc = lambda x: str(x).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
@@ -1387,7 +1238,7 @@ def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="id_
         f"🔐 <b>SSH WS</b>  : {esc(host)}:80@{esc(u)}:{esc(p)}",
         f"🔐 <b>SSH TLS</b> : {esc(host)}:443@{esc(u)}:{esc(p)}",
         f"🔐 <b>SSH UDP</b> : {esc(host)}:1-65535@{esc(u)}:{esc(p)}",
-        f"🔐 <b>SSH SLOW DNS</b> : {esc(slow_line)}", "",
+        f"🔐 <b>SSH SLOW</b> : {esc(slow_line)}", "",
         f"🧩 <b>PAYLOAD WS</b> : {esc(payload_ws)}", "",
         f"🧩 <b>PAYLOAD TLS</b> : {esc(payload_tls)}", "",
         f"┌────────────────────────",
@@ -1829,14 +1680,27 @@ async def cb(u,c):
         except: pass
         return
 
+    if d == "admin|server_status":
+        if not is_owner(uid): return
+        lines = ["<blockquote>", "🌐 <b>STATUS SERVER REAL-TIME</b>", "───────────────────────", ""]
+        if not SERVERS:
+            lines += ["⚠️ Belum ada server", ""]
+        for k, srv in SERVERS.items():
+            ok, ms = await asyncio.to_thread(server_realtime_status, k)
+            state = f"🟢 ONLINE • {ms} ms" if ok else "🔴 OFFLINE"
+            lines += [f"🖥️ {srv.get('name','-')}", f"└ Status: <b>{state}</b>", ""]
+        lines += ["───────────────────────", "</blockquote>"]
+        try:
+            await q.edit_message_text("\n".join(lines), reply_markup=InlineKeyboardMarkup([[B("🔄 Refresh","admin|server_status",style="success")],[B("🔙 Kembali","admin|menu",style="danger")]]), parse_mode="HTML")
+        except: pass
+        return
+
     if d == "admin|srv":
         if not is_owner(uid): return
-        lines = ["<blockquote>","💻 <b>KELOLA SERVER</b>","───────────────────────",""]
+        lines = ["<blockquote>","🌐 <b>DAFTAR SERVER</b>","───────────────────────",""]
         for k,s in SERVERS.items():
-            tag = " ⚠️" if not is_server_complete(s) else ""
-            lines.append(f"<b>{s.get('name','-')}{tag}</b>")
-            pd = s.get("price_day"); pm = s.get("price_month")
-            ip_l = s.get("ip_limit"); sm = s.get("slot_max")
+            lines.append(f"◆ {s.get('name','-')}")
+            pd = s.get('price_day'); pm = s.get('price_month'); ip_l = s.get('ip_limit'); sm = s.get('slot_max')
             lines.append(f"├ Harga Harian  : <b>{rupiah(pd) if pd else '❌ Belum diisi'}</b>")
             lines.append(f"├ Harga Bulanan : <b>{rupiah(pm) if pm else '❌ Belum diisi'}</b>")
             lines.append(f"├ Limit IP      : <b>{ip_l} IP</b>" if ip_l else "├ Limit IP      : <b>❌ Belum diisi</b>")
@@ -1852,6 +1716,7 @@ async def cb(u,c):
                 row.append(B(lb,f"srv_edit|{kk}",style="primary" if is_server_complete(s) else "danger"))
             rows.append(row)
         rows.append([B("➕ TAMBAH","srv_add",style="success"),B("🚫 HAPUS","srv_del_list",style="danger")])
+        rows.append([B("🌐 STATUS SERVER","admin|server_status",style="primary")])
         rows.append([B("🔙 Kembali","admin|menu",style="danger")])
         try: await q.edit_message_text("\n".join(lines),reply_markup=InlineKeyboardMarkup(rows),parse_mode="HTML")
         except: pass
@@ -1906,24 +1771,41 @@ async def cb(u,c):
         return
     if d == "srv_add":
         if not is_owner(uid): return
+        try: await q.edit_message_text(
+            "<blockquote>➕ <b>TAMBAH SERVER</b>\n───────────────────────\n\nPilih jenis server:</blockquote>",
+            reply_markup=InlineKeyboardMarkup([
+                [B("➕ SERVER","srv_add_local",style="success"),B("🔌 REMOTE","srv_add_remote",style="primary")],
+                [B("🔙 Kembali","admin|srv",style="danger")]]),parse_mode="HTML")
+        except: pass
+        return
+    if d == "srv_add_local":
+        if not is_owner(uid): return
+        c.user_data["srv_add_step"] = "local_name"
+        try: await q.edit_message_text(
+            "<blockquote>➕ <b>SERVER LANGSUNG</b>\n───────────────────────\n\nKirim nama server lokal.\nContoh: <code>🇮🇩 ID-RMHWEB-01</code>\n\nServer langsung masuk, lalu tinggal set data.</blockquote>",
+            reply_markup=InlineKeyboardMarkup([[B("❌ Batal","admin|srv",style="danger")]]),parse_mode="HTML")
+        except: pass
+        return
+    if d == "srv_add_remote":
+        if not is_owner(uid): return
         c.user_data["srv_add_step"] = "input"
         try: await q.edit_message_text(
-            "<blockquote>➕ <b>TAMBAH SERVER</b>\n───────────────────────\n"
-            "Format: <code>nama|ip|port</code>\n\nContoh:\n"
-            "<code>🇮🇩 INDO|103.123.45.67|22</code>\n\nLocal: <code>LOCAL|127.0.0.1|22</code>\n</blockquote>",
+            "<blockquote>🔌 <b>REMOTE SERVER</b>\n───────────────────────\n\nFormat: <code>nama|ip|port</code>\n\nContoh:\n<code>🇮🇩 INDO|103.123.45.67|22</code></blockquote>",
             reply_markup=InlineKeyboardMarkup([[B("❌ Batal","admin|srv",style="danger")]]),parse_mode="HTML")
         except: pass
         return
     if d == "srv_del_list":
         if not is_owner(uid): return
-        remote = {k:v for k,v in SERVERS.items() if not is_local_server(k)}
-        if not remote:
-            try: await q.edit_message_text("<blockquote>🚫 <b>HAPUS SERVER</b>\n───────────────────────\n\n⚠️ Tidak ada server remote.\n───────────────────────\n</blockquote>",
+        all_servers = SERVERS
+        if not all_servers:
+            try: await q.edit_message_text("<blockquote>🚫 <b>HAPUS SERVER</b>\n───────────────────────\n\n⚠️ Tidak ada server.\n───────────────────────\n</blockquote>",
                 reply_markup=InlineKeyboardMarkup([[B("🔙 Kembali","admin|srv",style="danger")]]),parse_mode="HTML")
             except: pass
             return
         rows = []
-        for k,v in remote.items(): rows.append([B(v.get("name","-"),f"srv_del|{k}",style="danger")])
+        for k,v in all_servers.items():
+            icon = "➕" if is_local_server(k) else "🔌"
+            rows.append([B(f"{icon} {v.get('name','-')}",f"srv_del|{k}",style="danger")])
         rows.append([B("🔙 Kembali","admin|srv",style="danger")])
         try: await q.edit_message_text("<blockquote>🚫 <b>HAPUS SERVER</b>\n───────────────────────\n\nPilih server:\n───────────────────────\n</blockquote>",
             reply_markup=InlineKeyboardMarkup(rows),parse_mode="HTML")
@@ -1933,12 +1815,12 @@ async def cb(u,c):
         if not is_owner(uid): return
         k = d.split("|")[1]
         if k not in SERVERS: await q.answer("No",show_alert=True); return
-        if is_local_server(k): await q.answer("❌ Server lokal dilindungi",show_alert=True); return
-        s = SERVERS[k]; used = count_slots(k)
+        s = SERVERS[k]; used = count_slots(k); local = is_local_server(k)
+        note = ("⚠️ Server lokal: hanya data server bot dan akun JSON yang dihapus.\n" if local else "🔴 Remote: data server bot, akun JSON, dan SSH key bot dihapus.\n")
         try: await q.edit_message_text(
             f"<blockquote>⚠️ <b>KONFIRMASI HAPUS</b>\n───────────────────────\n"
             f"Server: <b>{s.get('name','-')}</b>\nHost: <code>{s.get('ssh_host','-')}:{s.get('ssh_port',22)}</code>\nAkun: <b>{used}</b>\n\n"
-            f"🔴 Akan DIHAPUS semua user OS, akun JSON, SSH key.\n\n⚠️ <i>Tidak bisa dipulihkan!</i>\n</blockquote>",
+            f"{note}⚠️ <i>Tidak bisa dipulihkan!</i>\n</blockquote>",
             reply_markup=InlineKeyboardMarkup([[B("✅ Ya, Hapus",f"srv_del_yes|{k}",style="danger")],
                 [B("❌ Batal",f"srv_edit|{k}",style="danger")]]),parse_mode="HTML")
         except: pass
@@ -1947,25 +1829,21 @@ async def cb(u,c):
         if not is_owner(uid): return
         k = d.split("|")[1]
         if k not in SERVERS: await q.answer("No",show_alert=True); return
-        if is_local_server(k): await q.answer("❌ DIlindungi",show_alert=True); return
         try: await q.edit_message_text("🗑️ <b>Menghapus...</b>",parse_mode="HTML")
         except: pass
-        s = SERVERS[k]; dele = 0
-        try:
-            code,o,_ = ssh_run("awk -F: '$3>=1000 && $3<60000 {print $1}' /etc/passwd",k,timeout=10)
-            if code == 0:
-                for un in o.split():
+        s = SERVERS[k]; local = is_local_server(k); dele = 0
+        accs = load_json(ACCOUNTS_FILE,{}); rem = 0
+        for un in list(accs.keys()):
+            if accs[un].get("server_key") == k:
+                if not local:
                     try:
                         ssh_run(f"pkill -9 -u {un} 2>/dev/null; userdel -r {un} 2>/dev/null",k,timeout=15)
                         dele += 1
                     except: pass
-        except: pass
-        accs = load_json(ACCOUNTS_FILE,{}); rem = 0
-        for un in list(accs.keys()):
-            if accs[un].get("server_key") == k: accs.pop(un); rem += 1
+                accs.pop(un); rem += 1
         save_json(ACCOUNTS_FILE,accs)
         kf = s.get("ssh_key")
-        if kf and os.path.exists(kf):
+        if (not local) and kf and os.path.exists(kf):
             try: os.remove(kf)
             except: pass
             if os.path.exists(kf+".pub"):
@@ -1974,7 +1852,7 @@ async def cb(u,c):
         SERVERS.pop(k,None); save_servers()
         try: await q.edit_message_text(
             f"<blockquote>✅ <b>Dihapus</b>\n\nServer: <b>{s.get('name','-')}</b>\nUser OS: <b>{dele}</b>\nAkun JSON: <b>{rem}</b>\n</blockquote>",
-            reply_markup=InlineKeyboardMarkup([[B("💻 Kelola Server","admin|srv",style="primary")],
+            reply_markup=InlineKeyboardMarkup([[B("🌐 Daftar Server","admin|srv",style="primary")],
                 [B("🔙 Menu","admin|menu",style="danger")]]),parse_mode="HTML")
         except: pass
         asyncio.create_task(sync_push_async()); return
@@ -1993,7 +1871,7 @@ async def cb(u,c):
             "ip_limit":None,"slot_max":None,"quota_gb":None}
         save_servers(); c.user_data["srv_add_pending"] = None
         try: await q.edit_message_text(f"<blockquote>✅ <b>{pend['nama']} ditambahkan</b>\n\n⚠️ Lengkapi data dulu</blockquote>",
-            reply_markup=InlineKeyboardMarkup([[B("💻 Kelola Server","admin|srv",style="primary")],
+            reply_markup=InlineKeyboardMarkup([[B("🌐 Daftar Server","admin|srv",style="primary")],
                 [B("🔙 Menu","admin|menu",style="danger")]]),parse_mode="HTML")
         except: pass
         asyncio.create_task(sync_push_async()); return
@@ -2022,8 +1900,9 @@ async def cb(u,c):
             bw = s["bw"]; bws = f"{bw:.0f}" if bw >= 1 else f"{bw:.1f}"
             svr_parts.append(f"├ {s['name']}{tag}\n│ ├ Qouta  : <b>{bws}/{s['quota']}</b>\n│ ├ Slot   : <b>{s['used']}/{s['max']}</b>\n│ ╰ Status : <b>{s['status']}</b>")
         svr_txt = "\n".join(svr_parts)
-        txt = ("<blockquote>💻 <b>PENGATURAN VPS BOT VPN</b>\n───────────────────────\n"
-            f"👥 Total User : <b>{us['total']}</b>\n   Total Akun : <b>{count_accounts()}</b>\n\n"
+        txt = ("<blockquote>⚙️ <b>PENGATURAN</b>\n───────────────────────\n"
+            f"👥 Total User : <b>{us['total']}</b>\n"
+            f"   Total Akun : <b>{count_accounts()}</b>\n\n"
             "📈 <b>PENGHASILAN</b>\n"
             f"├ Hari Ini   : <b>{rupiah(inc['hari'])}</b>\n├ Minggu Ini : <b>{rupiah(inc['minggu'])}</b>\n"
             f"├ Bulan Ini  : <b>{rupiah(inc['bulan'])}</b>\n└ Total      : <b>{rupiah(inc['total'])}</b>\n\n"
@@ -2327,6 +2206,22 @@ async def msg(u,c):
                 await u.message.reply_text(f"❌ <b>Gagal</b>\n<code>{str(info)[:200]}</code>",reply_markup=kb_backup(),parse_mode="HTML")
         else:
             await u.message.reply_text(f"✅ <b>Disimpan!</b>\n\n" + backup_config_text(),reply_markup=kb_backup(),parse_mode="HTML")
+        return
+
+    if c.user_data.get("srv_add_step") == "local_name" and is_owner(uid):
+        c.user_data["srv_add_step"] = None
+        nama = t.strip()
+        if len(nama) < 3:
+            await u.message.reply_text("❌ <b>Nama terlalu pendek.</b>",parse_mode="HTML")
+            c.user_data["srv_add_step"] = "local_name"; return
+        kn = re.sub(r'[^a-z0-9]','_',nama.lower())[:15] or f"local_{int(time.time())}"
+        if kn in SERVERS: kn = f"{kn}_{random.randint(100,999)}"
+        SERVERS[kn] = {"name":nama,"ssh_host":"127.0.0.1","ssh_port":22,"ssh_user":"root",
+            "ssh_key":SSH_KEY_PATH,"city":"-","isp":"-","ssh_ovpn":nama,
+            "domain":None,"price_day":None,"price_month":None,
+            "ip_limit":None,"slot_max":None,"quota_gb":None}
+        save_servers(); asyncio.create_task(sync_push_async())
+        await u.message.reply_text(f"<blockquote>✅ <b>{nama} ditambahkan</b>\n\nServer lokal sudah masuk.\n⚙️ Tinggal set data server.</blockquote>", reply_markup=InlineKeyboardMarkup([[B("⚙️ Atur Server",f"srv_edit|{kn}",style="primary")],[B("🔙 Kelola Server","admin|srv",style="danger")]]), parse_mode="HTML")
         return
 
     if c.user_data.get("srv_add_step") == "input" and is_owner(uid):
