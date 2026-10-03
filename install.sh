@@ -2597,7 +2597,6 @@ center_text(){
 show_banner(){ clear
     local os kernel cpu load ram disk up now ip bot ws ssl udp xry ngx drp hap
     local sshc vmc vlc trc total onl city isp country geo today month speed upv downv tv
-    local BOX=42 INNER=40
     os=$(grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"')
     kernel=$(uname -r 2>/dev/null)
     cpu=$(nproc 2>/dev/null || echo 0)
@@ -2616,72 +2615,66 @@ show_banner(){ clear
     downv=$(awk '{print $1}' <<< "$today"); upv=$(awk '{print $2}' <<< "$today"); tv=$(awk '{print $3}' <<< "$today")
     speed=$(get_speed 2>/dev/null)
 
-    echo ""
-    center_text "${WH}──✦ SCRIPT AUTO INSTAL VPN V2.1 ✦──${N}" 62
-    center_text "${GY}${now}${N}" 62
-    echo ""
+    local W=58 I=56
+    line(){ printf "${WH}╭%*s╮${N}\n" "$W" '' | sed 's/ /─/g'; }
+    bottom(){ printf "${WH}╰%*s╯${N}\n" "$W" '' | sed 's/ /─/g'; }
+    status(){ [ "$1" = "active" ] && printf "${GR}● ONLINE${N}" || printf "${RE}● OFFLINE${N}"; }
 
-    # SERVER INFORMATION
-    printf "${WH}╭%*s╮${N}\n" "$INNER" '' | sed 's/ /─/g'
-    printf "${WH}│${N}   ${CY}🖥️ SERVER INFORMATION${N}%*s${WH}│${N}\n" 17 ''
-    printf "${WH}│${N}   ${GY}├─${N} ${WH}OS       %-29s${N}${WH}│${N}\n" "${os:0:29}"
-    printf "${WH}│${N}   ${GY}├─${N} ${WH}Kernel   %-29s${N}${WH}│${N}\n" "${kernel:0:29}"
-    printf "${WH}│${N}   ${GY}├─${N} ${WH}RAM      ${N}%s ${GR}%3s%%${N}%*s${WH}│${N}\n" "$(bar "$ram")" "$ram" $((15-${#ram})) ''
-    printf "${WH}│${N}   ${GY}├─${N} ${WH}Disk     ${N}%s ${GR}%3s%%${N}%*s${WH}│${N}\n" "$(bar "$disk")" "$disk" $((15-${#disk})) ''
-    printf "${WH}│${N}   ${GY}└─${N} ${WH}Uptime   %-29s${N}${WH}│${N}\n" "$up"
-    printf "${WH}╰%*s╯${N}\n" "$INNER" '' | sed 's/ /─/g'
-    echo ""
+    echo
+    center_text "${WH}──✦ SCRIPT AUTO INSTAL VPN V2.1 ✦──${N}" 60
+    center_text "${WH}${now}${N}" 60
+    echo
 
-    # NETWORK
-    printf "${WH}╭%*s╮${N}\n" "$INNER" '' | sed 's/ /─/g'
-    printf "${WH}│${N}   ${CY}🌐 NETWORK${N}%*s${WH}│${N}\n" 26 ''
-    printf "${WH}│${N}   ${GY}├─${N} ${WH}IP       %-29s${N}${WH}│${N}\n" "${ip:0:29}"
-    printf "${WH}│${N}   ${GY}├─${N} ${WH}ISP      %-29s${N}${WH}│${N}\n" "${isp:0:29}"
-    printf "${WH}│${N}   ${GY}└─${N} ${WH}Country  %-29s${N}${WH}│${N}\n" "${country:-Indonesia}"
-    printf "${WH}╰%*s╯${N}\n" "$INNER" '' | sed 's/ /─/g'
-    echo ""
+    line
+    printf "${WH}│${N}   ${CY}🖥 SERVER INFORMATION${N}%*s${WH}│${N}\n" 30 ''
+    printf "${WH}│${N}   ${GY}├─${N} ${YL}OS       ${N}${WH}%-31s${N}${WH}│${N}\n" "${os:0:31}"
+    printf "${WH}│${N}   ${GY}├─${N} ${YL}Kernel   ${N}${WH}%-31s${N}${WH}│${N}\n" "${kernel:0:31}"
+    printf "${WH}│${N}   ${GY}├─${N} ${YL}RAM      ${N}${GR}%s %3s%%${N}%*s${WH}│${N}\n" "$(bar "$ram")" "$ram" 14 ''
+    printf "${WH}│${N}   ${GY}├─${N} ${YL}Disk     ${N}${GR}%s %3s%%${N}%*s${WH}│${N}\n" "$(bar "$disk")" "$disk" 14 ''
+    printf "${WH}│${N}   ${GY}└─${N} ${YL}Uptime   ${N}${WH}%-31s${N}${WH}│${N}\n" "$up"
+    bottom; echo
 
-    # SERVICES
-    printf "${WH}╭%*s╮${N}\n" "$INNER" '' | sed 's/ /─/g'
-    printf "${WH}│${N}   ${CY}⚙️ SERVICES${N}%*s${WH}│${N}\n" 27 ''
-    printf "${WH}│${N}   ${GY}├─${N} ${WH}SSH${N}                                      ${WH}│${N}\n"
-    printf "${WH}│${N}   ${GY}├─${N} ${WH}UDP${N}                                      ${WH}│${N}\n"
-    printf "${WH}│${N}   ${GY}├─${N} ${WH}SSL${N}                                      ${WH}│${N}\n"
-    printf "${WH}│${N}   ${GY}├─${N} ${WH}Nginx${N}                                    ${WH}│${N}\n"
-    printf "${WH}│${N}   ${GY}├─${N} ${WH}Xray${N}                                     ${WH}│${N}\n"
-    printf "${WH}│${N}   ${GY}├─${N} ${WH}Dropbear${N}                                 ${WH}│${N}\n"
-    printf "${WH}│${N}   ${GY}├─${N} ${WH}HAProxy${N}                                  ${WH}│${N}\n"
-    printf "${WH}│${N}   ${GY}└─${N} ${WH}Trojan${N}                                   ${WH}│${N}\n"
-    printf "${WH}╰%*s╯${N}\n" "$INNER" '' | sed 's/ /─/g'
-    echo ""
+    line
+    printf "${WH}│${N}   ${CY}🌐 NETWORK${N}%*s${WH}│${N}\n" 39 ''
+    printf "${WH}│${N}   ${GY}├─${N} ${YL}IP       ${N}${WH}%-31s${N}${WH}│${N}\n" "${ip:0:31}"
+    printf "${WH}│${N}   ${GY}├─${N} ${YL}ISP      ${N}${WH}%-31s${N}${WH}│${N}\n" "${isp:0:31}"
+    printf "${WH}│${N}   ${GY}└─${N} ${YL}Country  ${N}${WH}%-31s${N}${WH}│${N}\n" "${country:-Indonesia}"
+    bottom; echo
 
-    # TRAFFIC
-    printf "${WH}╭%*s╮${N}\n" "$INNER" '' | sed 's/ /─/g'
-    printf "${WH}│${N}   ${CY}📊 TRAFFIC${N}%*s${WH}│${N}\n" 27 ''
-    printf "${WH}│${N}   ${GY}├─${N} ${WH}Upload     %-10s  Download  %-10s${N}${WH}│${N}\n" "${upv:-0}" "${downv:-0}"
-    printf "${WH}│${N}   ${GY}├─${N} ${WH}Total      %-10s  Bandwidth %-9s${N}${WH}│${N}\n" "${tv:-0}" "N/A"
-    printf "${WH}│${N}   ${GY}└─${N} ${WH}Speed      %-29s${N}${WH}│${N}\n" "${speed:-0}"
-    printf "${WH}╰%*s╯${N}\n" "$INNER" '' | sed 's/ /─/g'
-    echo ""
+    line
+    printf "${WH}│${N}   ${CY}⚙ SERVICES${N}%*s${WH}│${N}\n" 40 ''
+    printf "${WH}│${N}   ${GY}├─${N} ${YL}SSH      ${N}$(status "$ws")%*s${WH}│${N}\n" 18 ''
+    printf "${WH}│${N}   ${GY}├─${N} ${YL}UDP      ${N}$(status "$udp")%*s${WH}│${N}\n" 18 ''
+    printf "${WH}│${N}   ${GY}├─${N} ${YL}SSL      ${N}$(status "$ssl")%*s${WH}│${N}\n" 18 ''
+    printf "${WH}│${N}   ${GY}├─${N} ${YL}Nginx    ${N}$(status "$ngx")%*s${WH}│${N}\n" 18 ''
+    printf "${WH}│${N}   ${GY}├─${N} ${YL}Xray     ${N}$(status "$xry")%*s${WH}│${N}\n" 18 ''
+    printf "${WH}│${N}   ${GY}├─${N} ${YL}Dropbear ${N}$(status "$drp")%*s${WH}│${N}\n" 18 ''
+    printf "${WH}│${N}   ${GY}├─${N} ${YL}HAProxy  ${N}$(status "$hap")%*s${WH}│${N}\n" 18 ''
+    printf "${WH}│${N}   ${GY}└─${N} ${YL}Bot      ${N}$(status "$bot")%*s${WH}│${N}\n" 18 ''
+    bottom; echo
 
-    # ACCOUNTS
-    printf "${WH}╭%*s╮${N}\n" "$INNER" '' | sed 's/ /─/g'
-    printf "${WH}│${N}   ${CY}👤 ACCOUNTS${N}%*s${WH}│${N}\n" 26 ''
+    line
+    printf "${WH}│${N}   ${CY}📊 TRAFFIC${N}%*s${WH}│${N}\n" 39 ''
+    printf "${WH}│${N}   ${GY}├─${N} ${YL}Upload     ${N}${WH}%-10s${N} ${YL}Download ${N}${WH}%-10s${N}%*s${WH}│${N}\n" "${upv:-0}" "${downv:-0}" 2 ''
+    printf "${WH}│${N}   ${GY}├─${N} ${YL}Total      ${N}${WH}%-10s${N} ${YL}Bandwidth ${N}${WH}%-9s${N}%*s${WH}│${N}\n" "${tv:-0}" "N/A" 1 ''
+    printf "${WH}│${N}   ${GY}└─${N} ${YL}Speed      ${N}${WH}%-31s${N}${WH}│${N}\n" "${speed:-0}"
+    bottom; echo
+
+    line
+    printf "${WH}│${N}   ${CY}👤 ACCOUNTS${N}%*s${WH}│${N}\n" 38 ''
     printf "${WH}│${N}   ${GY}└─${N} ${WH}VMESS ${CY}%s${N} • ${WH}VLESS ${CY}%s${N} • ${WH}TROJAN ${CY}%s${N} • ${WH}SSH ${CY}%s${N} • ${WH}TOTAL ${GR}%s${N}%*s${WH}│${N}\n" "$vmc" "$vlc" "$trc" "$sshc" "$total" 1 ''
-    printf "${WH}╰%*s╯${N}\n" "$INNER" '' | sed 's/ /─/g'
-    echo ""
+    bottom; echo
 
-    # MAIN MENU
-    printf "${WH}╭%*s╮${N}\n" "$INNER" '' | sed 's/ /─/g'
-    printf "${WH}│${N}   ${PU}✦ MAIN MENU${N}%*s${WH}│${N}\n" 27 ''
-    printf "${WH}│${N}   ${CY}├─${N} ${WH}[1]${N} ${CY}DAFTAR USER${N}       ${WH}[4]${N} ${CY}CEK SERVICE${N}%*s${WH}│${N}\n" 3 ''
-    printf "${WH}│${N}   ${CY}├─${N} ${WH}[2]${N} ${CY}INFORMATION VPS${N}   ${WH}[5]${N} ${CY}JALANKAN BOT${N}%*s${WH}│${N}\n" 3 ''
-    printf "${WH}│${N}   ${CY}└─${N} ${WH}[3]${N} ${CY}BACKUP / RESTORE${N}  ${WH}[6]${N} ${CY}EXIT${N}%*s${WH}│${N}\n" 7 ''
-    printf "${WH}╰%*s╯${N}\n" "$INNER" '' | sed 's/ /─/g'
-    printf "${WH}╭%*s╮${N}\n" "$INNER" '' | sed 's/ /─/g'
-    printf "${WH}│${N}   ${PU}✦${N} ${WH}Select [1-6] ›${N}%*s${WH}│${N}\n" 18 ''
-    printf "${WH}│${N}%*s${PK}❖  powered by ©sansxml  ❖${N}%*s${WH}│${N}\n" 8 '' 8 ''
-    printf "${WH}╰%*s╯${N}\n" "$INNER" '' | sed 's/ /─/g'
+    line
+    printf "${WH}│${N}        ${PU}>>> SANSXML MAIN MENU <<<${N}%*s${WH}│${N}\n" 28 ''
+    printf "${WH}│${N}   ${CY}[01]${N} ${WH}DAFTAR USER${N}%*s${CY}[04]${N} ${WH}CEK SERVICE${N}%*s${WH}│${N}\n" 9 '' 5 ''
+    printf "${WH}│${N}   ${CY}[02]${N} ${WH}INFORMATION VPS${N}%*s${CY}[05]${N} ${WH}JALANKAN BOT${N}%*s${WH}│${N}\n" 2 '' 5 ''
+    printf "${WH}│${N}   ${CY}[03]${N} ${WH}BACKUP / RESTORE${N}%*s${CY}[06]${N} ${WH}EXIT${N}%*s${WH}│${N}\n" 0 '' 15 ''
+    bottom
+    line
+    printf "${WH}│${N}   ${PU}✦${N} ${WH}Select Menu [1-6] ›${N}%*s${WH}│${N}\n" 28 ''
+    printf "${WH}│${N}%*s${GY}❖  powered by ©sansxml  ❖${N}%*s${WH}│${N}\n" 18 '' 18 ''
+    bottom
 }
 
 show_menu(){
