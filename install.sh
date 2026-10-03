@@ -126,72 +126,120 @@ echo ""
 
 ( cat > /usr/local/bin/ws-ssh.py << 'WSEOF'
 #!/usr/bin/env python3
-import socket, threading, sys, hashlib, base64
+import socket, threading, sys, hashlib, base64, logging
+
 LP = int(sys.argv[1]) if len(sys.argv) > 1 else 80
+logging.basicConfig(
+    filename=f"/var/log/ws-ssh-{LP}.log",
+    level=logging.INFO,
+    format="%(asctime)s %(levelname)s %(message)s"
+)
+
 def fwd(src, dst):
     try:
         while True:
             d = src.recv(65536)
-            if not d: break
+            if not d:
+                break
             dst.sendall(d)
-    except: pass
+    except Exception:
+        pass
     finally:
-        try: dst.shutdown(socket.SHUT_WR)
-        except: pass
-def handle(c, a):
+        try:
+            dst.shutdown(socket.SHUT_WR)
+        except Exception:
+            pass
+
+def read_http_headers(c, first):
+    h = first
     try:
-        c.settimeout(3); first = b""
-        try: first = c.recv(4096)
-        except: pass
-        if first and first.startswith((b"GET ",b"POST ",b"CONNECT ",b"HEAD ")):
-            h = first
-            try:
-                while b"\r\n\r\n" not in h and len(h) < 65536:
-                    x = c.recv(4096)
-                    if not x: break
-                    h += x
-            except: pass
-            k = None
-            for l in h.split(b"\r\n    if d == "srv_del_list":
-        if not is_owner(uid): return
-        if not SERVERS:
-            try: await q.edit_message_text("<blockquote>🚫 <b>HAPUS SERVER</b>\n───────────────────────\n\n⚠️ Belum ada server.\n</blockquote>", reply_markup=InlineKeyboardMarkup([[B("🔙 Kembali","admin|srv",style="danger")]]), parse_mode="HTML")
-            except: pass
-            return
-        rows = []
-        for k,v in SERVERS.items():
-            typ = "🔌" if not is_local_server(k) else "➕"
-            rows.append([B(f"{typ} {v.get('name','-')}",f"srv_del|{k}",style="danger")])
-        rows.append([B("🔙 Kembali","admin|srv",style="danger")])
-        try: await q.edit_message_text("<blockquote>🚫 <b>HAPUS SERVER</b>\n───────────────────────\n\nPilih server:</blockquote>", reply_markup=InlineKeyboardMarkup(rows), parse_mode="HTML")
-        except: pass
-        return
-    if d.startswith("srv_del|"):
-                if l.lower().startswith(b"sec-websocket-key:"):
-                    k = l.split(b":",1)[1].strip(); break
-            acc = base64.b64encode(hashlib.sha1(k + b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest()) if k else b"s3pPLMBiTxaQ9kYGzzhZRbK+xOo="
-            c.sendall(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + acc + b"\r\n\r\n")
-        s = socket.create_connection(("127.0.0.1", 22), timeout=10)
-        s.settimeout(None); c.settimeout(None)
-        if first and not first.startswith((b"GET ",b"POST ",b"CONNECT ",b"HEAD ")):
-            s.sendall(first)
-        t1 = threading.Thread(target=fwd, args=(c, s), daemon=True)
-        t2 = threading.Thread(target=fwd, args=(s, c), daemon=True)
-        t1.start(); t2.start(); t1.join(); t2.join()
-    except: pass
+        while b"\r\n\r\n" not in h and len(h) < 65536:
+            x = c.recv(4096)
+            if not x:
+                break
+            h += x
+    except Exception:
+        pass
+    return h
+
+def handle(c, a):
+    ssh = None
+    try:
+        c.settimeout(5)
+        first = b""
+        try:
+            first = c.recv(4096)
+        except Exception:
+            pass
+
+        # Accept normal HTTP/WS upgrade requests and CONNECT-style payloads.
+        if first and first.startswith((b"GET ", b"POST ", b"CONNECT ", b"HEAD ")):
+            h = read_http_headers(c, first)
+            key = None
+            upgrade = False
+            for line in h.split(b"\r\n"):
+                low = line.lower()
+                if low.startswith(b"sec-websocket-key:"):
+                    key = line.split(b":", 1)[1].strip()
+                elif low.startswith(b"upgrade:") and b"websocket" in low:
+                    upgrade = True
+
+            if key and upgrade:
+                accept = base64.b64encode(
+                    hashlib.sha1(key + b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest()
+                )
+                c.sendall(
+                    b"HTTP/1.1 101 Switching Protocols\r\n"
+                    b"Upgrade: websocket\r\n"
+                    b"Connection: Upgrade\r\n"
+                    b"Sec-WebSocket-Accept: " + accept + b"\r\n\r\n"
+                )
+            elif first.startswith(b"CONNECT "):
+                c.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
+
+        ssh = socket.create_connection(("127.0.0.1", 22), timeout=10)
+        ssh.settimeout(None)
+        c.settimeout(None)
+
+        # HTTP handshake headers are consumed by this proxy and are not sent to SSH.
+        # Non-HTTP initial data is forwarded as raw tunnel data.
+        if first and not first.startswith((b"GET ", b"POST ", b"CONNECT ", b"HEAD ")):
+            ssh.sendall(first)
+
+        t1 = threading.Thread(target=fwd, args=(c, ssh), daemon=True)
+        t2 = threading.Thread(target=fwd, args=(ssh, c), daemon=True)
+        t1.start()
+        t2.start()
+        t1.join()
+        t2.join()
+    except Exception as e:
+        logging.warning("connection %s failed: %s", a, e)
     finally:
-        try: c.close()
-        except: pass
+        try:
+            if ssh:
+                ssh.close()
+        except Exception:
+            pass
+        try:
+            c.close()
+        except Exception:
+            pass
+
 def main():
     sv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     sv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sv.bind(("0.0.0.0", LP)); sv.listen(500)
+    sv.bind(("0.0.0.0", LP))
+    sv.listen(500)
+    logging.info("WS-SSH listening on 0.0.0.0:%s", LP)
     while True:
         try:
             c, a = sv.accept()
             threading.Thread(target=handle, args=(c, a), daemon=True).start()
-        except: pass
-if __name__ == "__main__": main()
+        except Exception as e:
+            logging.warning("accept failed: %s", e)
+
+if __name__ == "__main__":
+    main()
 WSEOF
   chmod +x /usr/local/bin/ws-ssh.py
   for port in 80 8080; do
@@ -199,19 +247,23 @@ WSEOF
     cat > /etc/systemd/system/${svc}.service << EOF
 [Unit]
 Description=WS-SSH $port
-After=network.target
+After=network.target ssh.service
+Wants=ssh.service
+
 [Service]
 Type=simple
 ExecStart=/usr/bin/python3 /usr/local/bin/ws-ssh.py $port
 Restart=always
-RestartSec=3
+RestartSec=2
 LimitNOFILE=100000
+StandardOutput=journal
+StandardError=journal
+
 [Install]
 WantedBy=multi-user.target
 EOF
   done
 ) & spin $! "Install WS-SSH"
-
 ( mkdir -p /etc/stunnel
   openssl req -new -x509 -days 3650 -nodes -out /etc/stunnel/stunnel.pem -keyout /etc/stunnel/stunnel.pem -subj "/CN=sansxml.local" 2>/dev/null
   cat > /etc/stunnel/stunnel.conf << 'EOF'
