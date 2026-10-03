@@ -2588,6 +2588,12 @@ box_row(){ printf " %b\n" "$1"; }
 kv(){ local key=$(printf '%-9s' "$1"); printf " ${GY}%s${N} ${PK}›${N} ${WH}%s${N}\n" "$key" "$2"; }
 kvc(){ local key=$(printf '%-9s' "$1"); printf " ${GY}%s${N} ${PK}›${N} ${3}%s${N}\n" "$key" "$2"; }
 bar(){ local p=$1; local f=$((p/10)); local o=""; for ((i=1;i<=10;i++)); do [ $i -le $f ] && o="${o}█" || o="${o}░"; done; echo "$o"; }
+center_text(){
+    local text="$1" width="${2:-62}" len pad
+    len=${#text}; pad=$(( (width-len)/2 ))
+    (( pad < 0 )) && pad=0
+    printf "%*s%s\n" "$pad" "" "$text"
+}
 show_banner(){
     local os kernel cpu load ram disk up now ip bot ws ssl udp xry ngx drp hap
     local sshc vmc vlc trc total onl city isp country geo
@@ -2607,38 +2613,30 @@ show_banner(){
     total=$((sshc+vmc+vlc+trc)); onl=$(get_online)
 
     echo ""
-    printf "        ${PU2}✦${N} ${WH}sansxml${N}  ${CY}◆${N}  ${PU2}VPS${N}  ${CY}◆${N}\n"
-    printf "        ${CY}%s${N}\n\n" "$now"
+    center_text "──✦ SCRIPT AUTO INSTAL VPN V2.1 ✦──" 62
+    center_text "$(printf '%s' "$now" | sed 's/  / • /')" 62
+    echo ""
 
-    printf "${PU}╭─ ${PK}SERVER${PU} ─────────────────────────────────────────────────────╮${N}\n"
-    printf " ${GY}OS${N}       ${WH}%s${N}   ${GY}CPU${N} ${WH}%s vCPU${N}\n" "$os" "$cpu"
-    printf " ${GY}KERNEL${N}   ${WH}%s${N}   ${GY}LOAD${N} ${WH}%s${N}\n" "$kernel" "$load"
-    printf " ${GY}RAM${N}      ${WH}%s  %s${N}   ${GY}DISK${N} ${WH}%s  %s${N}\n" "$(bar "$ram")" "${ram}%" "$(bar "$disk")" "${disk}%"
-    printf " ${GY}UPTIME${N}   ${WH}%s${N}   ${GY}STATUS${N} ${GR}●${N} ${WH}ONLINE${N}\n" "$up"
-    printf " ${GY}IP${N}       ${WH}%-18s${N} ${GY}ISP${N} ${WH}%s${N}\n" "$ip" "${isp:0:28}"
-    printf " ${GY}CITY${N}     ${WH}%-18s${N} ${GY}COUNTRY${N} ${WH}%s 🇮🇩${N}\n" "$city" "$country"
-    printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
+    printf "${WH}╭─ SERVER ─────────────────────────────────────────────────────╮${N}\n"
+    printf "${WH}│${N} ${GY}OS${N}       ${WH}%-20s${N}   ${GY}CPU${N}    ${WH}%s vCPU${N}                 ${WH}│${N}\n" "$os" "$cpu"
+    printf "${WH}│${N} ${GY}KERNEL${N}   ${WH}%-20s${N}   ${GY}LOAD${N}   ${WH}%-17s${N} ${WH}│${N}\n" "$kernel" "$load"
+    printf "${WH}│${N} ${GY}RAM${N}      ${WH}%s %3s%%${N}       ${GY}DISK${N}   ${WH}%s %3s%%${N}       ${WH}│${N}\n" "$(bar "$ram")" "$ram" "$(bar "$disk")" "$disk"
+    printf "${WH}│${N} ${GY}UPTIME${N}   ${WH}%-20s${N}                              ${WH}│${N}\n" "$up"
+    printf "${WH}│${N} ${GY}IP${N}       ${WH}%-20s${N}   ${GY}ISP${N}    ${WH}%-27s${N} ${WH}│${N}\n" "$ip" "${isp:0:27}"
+    printf "${WH}│${N} ${GY}CITY${N}     ${WH}%-20s${N}   ${GY}COUNTRY${N} ${WH}%-10s${N} ${WH}│${N}\n" "$city" "$country 🇮🇩"
+    printf "${WH}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
 
-    printf "${PU}╭─ ${PK}TRAFFIC${PU} ────────────────────────────────────────────────────╮${N}\n"
-    printf " ${GY}TODAY${N}    ${WH}%s${N}\n" "$(get_traffic_pair d)"
-    printf " ${GY}MONTH${N}    ${WH}%s${N}\n" "$(get_traffic_pair m)"
-    printf " ${GY}SPEED${N}    ${WH}%s${N}   ${GY}%s${N}\n" "$(get_speed)" "$(date '+%B' | tr '[:upper:]' '[:lower:]')"
-    printf " ${GY}LIMIT${N}    ${WH}0 / 3000 GB${N}\n"
-    printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
+    printf "${WH}╭─ SERVICES ───────────────────────────────────────────────────╮${N}\n"
+    printf "${WH}│${N} ${WH}%b BOT TELEGRAM${N}  ${WH}%b SSH-WS${N}  ${WH}%b SSL${N}  ${WH}%b UDP${N}  ${WH}%b NGIX${N}  ${WH}%b XRAY${N} ${WH}│${N}\n" \
+      "$(status_dot "$bot")" "$(status_dot "$ws")" "$(status_dot "$ssl")" "$(status_dot "$udp")" "$(status_dot "$ngx")" "$(status_dot "$xry")"
+    printf "${WH}│${N} ${WH}%b DROPBEAR${N}  ${WH}%b HAPROXY${N}                                      ${WH}│${N}\n" \
+      "$(status_dot "$drp")" "$(status_dot "$hap")"
+    printf "${WH}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
 
-    printf "${PU}╭─ ${PK}SERVICES${PU} ───────────────────────────────────────────────────╮${N}\n"
-    printf " ${WH}%b BOT${N}       ${WH}%b SSH-WS${N}    ${WH}%b SSL${N}      ${WH}%b UDP${N}\n" \
-      "$(status_dot "$bot")" "$(status_dot "$ws")" "$(status_dot "$ssl")" "$(status_dot "$udp")"
-    printf " ${WH}%b XRAY${N}     ${WH}%b NGIX${N}      ${WH}%b DROPBEAR${N}  ${WH}%b HAPROXY${N}\n" \
-      "$(status_dot "$xry")" "$(status_dot "$ngx")" "$(status_dot "$drp")" "$(status_dot "$hap")"
-    printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
-
-    printf "${PU}╭─ ${PK}ACCOUNTS${PU} ───────────────────────────────────────────────────╮${N}\n"
-    printf " ${GY}SSH/OVPN${N} ${WH}%s${N}   ${GY}VMESS${N} ${WH}%s${N}   ${GY}VLESS${N} ${WH}%s${N}   ${GY}TROJAN${N} ${WH}%s${N}   ${GY}TOTAL${N} ${WH}%s${N}\n" "$sshc" "$vmc" "$vlc" "$trc" "$total"
-    printf " ${GY}LIVE${N}     ${GR}●${N} ${WH}OK${N}   ${GY}ONLINE${N} ${WH}%s${N}   ${GY}RAM${N} ${WH}%s%%${N}   ${GY}CPU${N} ${WH}%s%%${N}\n" "$onl" "$ram" "$(get_cpu_pct)"
-    printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n"
+    printf "${WH}╭─ ACCOUNTS ───────────────────────────────────────────────────╮${N}\n"
+    printf "${WH}│${N} ${GY}SSH${N} %-4s  ${GY}VMESS${N} %-4s  ${GY}VLESS${N} %-4s  ${GY}TROJAN${N} %-4s  ${GY}TOTAL${N} %-4s ${WH}│${N}\n" "$sshc" "$vmc" "$vlc" "$trc" "$total"
+    printf "${WH}╰──────────────────────────────────────────────────────────────╯${N}\n"
 }
-
 status_dot(){ [ "$1" = "active" ] && printf "${GR}●${N}" || printf "${RE}●${N}"; }
 get_xray_count(){
     local proto="$1" f="/root/vpnbot_accounts.json"
@@ -2883,11 +2881,11 @@ reset_github_backup(){
 
 show_menu(){ clear
     show_banner
-    printf "\n${PU}╭─ ${PK}MENU${PU} ───────────────────────────────────────────────────────╮${N}\n"
+    printf "\n${WH}╭─ MENU ───────────────────────────────────────────────────────╮${N}\n"
     printf " ${CY}[1]${N}  ${WH}DAFTAR USER${N}             ${CY}[4]${N}  ${WH}CEK SERVICE${N}\n"
     printf " ${CY}[2]${N}  ${WH}INFORMATION VPS${N}         ${CY}[5]${N}  ${WH}JALANKAN BOT${N}\n"
     printf " ${CY}[3]${N}  ${WH}BACKUP / RESTORE${N}        ${CY}[6]${N}  ${WH}EXIT${N}\n"
-    printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
+    printf "${WH}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
     echo -ne "${PU2}✦${N} ${CY}Select${N} ${WH}[1-6]${N} ${PU2}›${N} "
 }
 show_vps_info(){ clear; show_banner; box_top "VPS INFORMATION"
