@@ -991,7 +991,7 @@ def reset_backup(keep=True):
 
 def kb_dash(uid):
     rows = [[B("➕  BUAT AKUN","buat_akun",style="primary"),B("⌛  TRIAL AKUN","trial_akun",style="primary")],
-        [B("🔄 PERPANJANG AKUN","perpanjang_akun",style="primary")],
+        [B("➕ PERPANJANG AKUN","perpanjang_akun",style="primary")],
         [B("💰 TOPUP SALDO","isi_saldo",style="primary"),B("📁 AKUN SAYA","my_accs",style="primary")],
         [B("🌐 STATUS SERVER","status_server",style="primary"),B("♻️ REFRESH","refresh",style="primary")]]
     rows.append([B("⚙️ PENGATURAN","admin|menu",style="danger")])
@@ -1067,14 +1067,22 @@ def kb_soon(p): return InlineKeyboardMarkup([[B("🔙 KEMBALI","pilih_layanan",s
 def dash_text(user, uid):
     un = f"@{user.username}" if user.username else "-"
     role = "Owner" if is_owner(uid) else "Member"
-    st = get_stats(uid); tu = len(load_json(USERS_FILE,{}))
-    lines = ["<blockquote>","💻 <b>SANSXML VPN STORE</b>","───────────────────────","👤 <b>Profil</b>"]
+    st = get_stats(uid)
+    inc = get_income()
+    tu = len(load_json(USERS_FILE,{}))
+    lines = ["<blockquote>","🤖 <b>SANSXML VPN STORE</b>","───────────────────────","👤 <b>Profil</b>"]
     lines += [f"├ User Telegram  : {un}",f"├ Chat ID        : <code>{uid}</code>",
               f"├ Keanggotaan    : {role}",f"├ Total Pengguna : <b>{tu}</b>",
-              f"╰ 💰 Saldo VPN  : <b>{rupiah(get_bal(uid))}</b>","","🌍 <b>Info Global</b>",
-              f"├ Minggu Ini     : <b>{st['minggu']} Akun</b>",f"├ Bulan Ini      : <b>{st['bulan']} Akun</b>",
-              f"╰ Keseluruhan    : <b>{st['total']} Akun</b>","","🌐 <b>Informasi</b>",
+              f"╰ 💰 Saldo VPN  : <b>{rupiah(get_bal(uid))}</b>","",
+              "📊 <b>Info Transaksi global</b>",
+              f"├ Minggu Ini     : <b>{st['minggu']} Akun</b>",
+              f"├ Bulan Ini      : <b>{st['bulan']} Akun</b>",
+              f"╰ Keseluruhan    : <b>{st['total']} Akun</b>","",
+              "🖥️ <b>Informasi</b>",
               f"├ Server Tersedia : <b>{len(get_active_servers())} Server</b>",
+              f"├ Hari ini        : <b>{sum(1 for t in load_json(TRX_FILE,[]) if t.get('waktu','').startswith(datetime.now().strftime('%Y-%m-%d')) and t.get('tipe')=='buat_akun')} Akun</b>",
+              f"├ Bulan ini       : <b>{st['bulan']} Akun</b>",
+              f"├ Total Transaksi : <b>{rupiah(inc['total'])}</b>",
               f"╰ Kuota Trial     : <b>{trial_left(uid)}x Hari</b>","","───────────────────────","</blockquote>"]
     return "\n".join(lines)
 def pilih_layanan_text():
@@ -1685,7 +1693,7 @@ async def cb(u,c):
             [B("Slot Server",f"srv_set|{k}|slot_max",style="primary"),B("Domain Server",f"srv_set|{k}|domain",style="primary")]]
         if not is_local_server(k):
             rows.append([B("🔧 SSH Setting",f"srv_ssh|{k}",style="primary")])
-            rows.append([B("🗑️ Hapus",f"srv_del|{k}",style="danger")])
+        rows.append([B("🗑️ Hapus",f"srv_del|{k}",style="danger")])
         rows.append([B("🔙 Kembali","admin|srv",style="danger")])
         try: await q.edit_message_text(txt,reply_markup=InlineKeyboardMarkup(rows),parse_mode="HTML")
         except: pass
@@ -1711,26 +1719,62 @@ async def cb(u,c):
         return
     if d == "srv_add":
         if not is_owner(uid): return
+        try: await q.edit_message_text(
+            "<blockquote>➕ <b>TAMBAH SERVER</b>\n───────────────────────\n\n"
+            "Pilih jenis server yang ingin ditambahkan.</blockquote>",
+            reply_markup=InlineKeyboardMarkup([
+                [B("➕ SERVER","srv_add_local",style="success"),B("🔌 REMOTE","srv_add_remote",style="primary")],
+                [B("🔙 Kembali","admin|srv",style="danger")]
+            ]),parse_mode="HTML")
+        except: pass
+        return
+    if d == "srv_add_local":
+        if not is_owner(uid): return
+        if any(is_local_server(k) for k in SERVERS):
+            await q.answer("⚠️ Server lokal sudah ada",show_alert=True); return
+        kn = "local_server"
+        if kn in SERVERS:
+            kn = f"local_{int(time.time())}"
+        nama = "🇮🇩 LOCAL SERVER"
+        SERVERS[kn] = {"name":nama,"ssh_host":"127.0.0.1","ssh_port":22,"ssh_user":"root",
+            "ssh_key":SSH_KEY_PATH,"city":"","isp":"","ssh_ovpn":nama,
+            "domain":None,"price_day":None,"price_month":None,
+            "ip_limit":None,"slot_max":None,"quota_gb":None}
+        save_servers()
+        try: await q.edit_message_text(
+            f"<blockquote>✅ <b>{nama} ditambahkan</b>\n\n"
+            "Server lokal sudah siap.\n"
+            "Sekarang tinggal atur nama, harga, limit, slot, domain, dan data lainnya.</blockquote>",
+            reply_markup=InlineKeyboardMarkup([
+                [B("⚙️ SET SERVER",f"srv_edit|{kn}",style="primary")],
+                [B("🔙 Kembali","admin|srv",style="danger")]
+            ]),parse_mode="HTML")
+        except: pass
+        asyncio.create_task(sync_push_async())
+        return
+    if d == "srv_add_remote":
+        if not is_owner(uid): return
         c.user_data["srv_add_step"] = "input"
         try: await q.edit_message_text(
-            "<blockquote>➕ <b>TAMBAH SERVER</b>\n───────────────────────\n"
-            "Format: <code>nama|ip|port</code>\n\nContoh:\n"
-            "<code>🇮🇩 INDO|103.123.45.67|22</code>\n\nLocal: <code>LOCAL|127.0.0.1|22</code>\n</blockquote>",
+            "<blockquote>🔌 <b>TAMBAH SERVER REMOTE</b>\n───────────────────────\n"
+            "Format: <code>nama|ip|port</code>\n\n"
+            "Contoh:\n<code>🇮🇩 ID-RMHWEB-05|103.123.45.67|22</code></blockquote>",
             reply_markup=InlineKeyboardMarkup([[B("❌ Batal","admin|srv",style="danger")]]),parse_mode="HTML")
         except: pass
         return
     if d == "srv_del_list":
         if not is_owner(uid): return
-        remote = {k:v for k,v in SERVERS.items() if not is_local_server(k)}
-        if not remote:
-            try: await q.edit_message_text("<blockquote>🚫 <b>HAPUS SERVER</b>\n───────────────────────\n\n⚠️ Tidak ada server remote.\n───────────────────────\n</blockquote>",
+        if not SERVERS:
+            try: await q.edit_message_text("<blockquote>🚫 <b>HAPUS SERVER</b>\n───────────────────────\n\n⚠️ Belum ada server.\n</blockquote>",
                 reply_markup=InlineKeyboardMarkup([[B("🔙 Kembali","admin|srv",style="danger")]]),parse_mode="HTML")
             except: pass
             return
         rows = []
-        for k,v in remote.items(): rows.append([B(v.get("name","-"),f"srv_del|{k}",style="danger")])
+        for k,v in SERVERS.items():
+            tag = " • LOCAL" if is_local_server(k) else " • REMOTE"
+            rows.append([B(f"{v.get('name','-')}{tag}",f"srv_del|{k}",style="danger")])
         rows.append([B("🔙 Kembali","admin|srv",style="danger")])
-        try: await q.edit_message_text("<blockquote>🚫 <b>HAPUS SERVER</b>\n───────────────────────\n\nPilih server:\n───────────────────────\n</blockquote>",
+        try: await q.edit_message_text("<blockquote>🚫 <b>HAPUS SERVER</b>\n───────────────────────\n\nPilih server yang ingin dihapus:\n</blockquote>",
             reply_markup=InlineKeyboardMarkup(rows),parse_mode="HTML")
         except: pass
         return
@@ -1738,12 +1782,13 @@ async def cb(u,c):
         if not is_owner(uid): return
         k = d.split("|")[1]
         if k not in SERVERS: await q.answer("No",show_alert=True); return
-        if is_local_server(k): await q.answer("❌ Server lokal dilindungi",show_alert=True); return
         s = SERVERS[k]; used = count_slots(k)
         try: await q.edit_message_text(
             f"<blockquote>⚠️ <b>KONFIRMASI HAPUS</b>\n───────────────────────\n"
             f"Server: <b>{s.get('name','-')}</b>\nHost: <code>{s.get('ssh_host','-')}:{s.get('ssh_port',22)}</code>\nAkun: <b>{used}</b>\n\n"
-            f"🔴 Akan DIHAPUS semua user OS, akun JSON, SSH key.\n\n⚠️ <i>Tidak bisa dipulihkan!</i>\n</blockquote>",
+            f"🔴 Server akan dihapus dari konfigurasi bot dan akun terkait.\n"
+            f"{'⚠️ Server lokal: user OS VPS tidak akan dihapus.' if is_local_server(k) else '⚠️ Server remote: user OS bot akan dibersihkan.'}\n\n"
+            f"⚠️ <i>Tidak bisa dipulihkan!</i>\n</blockquote>",
             reply_markup=InlineKeyboardMarkup([[B("✅ Ya, Hapus",f"srv_del_yes|{k}",style="danger")],
                 [B("❌ Batal",f"srv_edit|{k}",style="danger")]]),parse_mode="HTML")
         except: pass
@@ -1752,19 +1797,19 @@ async def cb(u,c):
         if not is_owner(uid): return
         k = d.split("|")[1]
         if k not in SERVERS: await q.answer("No",show_alert=True); return
-        if is_local_server(k): await q.answer("❌ DIlindungi",show_alert=True); return
         try: await q.edit_message_text("🗑️ <b>Menghapus...</b>",parse_mode="HTML")
         except: pass
         s = SERVERS[k]; dele = 0
-        try:
-            code,o,_ = ssh_run("awk -F: '$3>=1000 && $3<60000 {print $1}' /etc/passwd",k,timeout=10)
-            if code == 0:
-                for un in o.split():
-                    try:
-                        ssh_run(f"pkill -9 -u {un} 2>/dev/null; userdel -r {un} 2>/dev/null",k,timeout=15)
-                        dele += 1
-                    except: pass
-        except: pass
+        if not is_local_server(k):
+            try:
+                code,o,_ = ssh_run("awk -F: '$3>=1000 && $3<60000 {print $1}' /etc/passwd",k,timeout=10)
+                if code == 0:
+                    for un in o.split():
+                        try:
+                            ssh_run(f"pkill -9 -u {un} 2>/dev/null; userdel -r {un} 2>/dev/null",k,timeout=15)
+                            dele += 1
+                        except: pass
+            except: pass
         accs = load_json(ACCOUNTS_FILE,{}); rem = 0
         for un in list(accs.keys()):
             if accs[un].get("server_key") == k: accs.pop(un); rem += 1
