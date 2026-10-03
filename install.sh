@@ -312,8 +312,8 @@ EOF
 rc=$?
 finish_or_fail udpgw "$rc"
 [ "$rc" -eq 0 ] || exit 1
-run_step_sh firewall 'Mengatur firewall' 'ufw default allow incoming >/dev/null 2>&1; ufw default allow outgoing >/dev/null 2>&1; for p in 22 80 443 8080 8443 8444 8445 10001 10002 10003 10004 10005 10006 10007; do ufw allow $p/tcp >/dev/null 2>&1; done; ufw allow 7300/udp >/dev/null 2>&1; ufw allow 1:65535/udp >/dev/null 2>&1; ufw --force enable >/dev/null 2>&1' || exit 1
-run_step_sh services 'Menjalankan layanan VPN' 'systemctl daemon-reload; systemctl enable ws-ssh ws-ssh-alt stunnel4 dropbear nginx haproxy >/dev/null 2>&1; systemctl restart ws-ssh ws-ssh-alt stunnel4 dropbear nginx haproxy; [ -f /usr/bin/badvpn-udpgw ] && systemctl enable udpgw >/dev/null 2>&1 && systemctl restart udpgw; sleep 2' || exit 1
+run_step_sh firewall 'Mengatur firewall' 'ufw default allow incoming >/dev/null 2>&1; ufw default allow outgoing >/dev/null 2>&1; for p in 22 80 109 443 8080 8443 8444 8445 10001 10002 10003 10004 10005 10006 10007; do ufw allow $p/tcp >/dev/null 2>&1; done; ufw allow 7300/udp >/dev/null 2>&1; ufw allow 1:65535/udp >/dev/null 2>&1; ufw --force enable >/dev/null 2>&1' || exit 1
+run_step_sh services 'Menjalankan layanan VPN' 'systemctl daemon-reload; systemctl enable ws-ssh ws-ssh-alt stunnel4 dropbear nginx haproxy >/dev/null 2>&1; systemctl restart ws-ssh ws-ssh-alt stunnel4 dropbear nginx haproxy; systemctl enable dropbear >/dev/null 2>&1; systemctl restart dropbear >/dev/null 2>&1; [ -f /usr/bin/badvpn-udpgw ] && systemctl enable udpgw >/dev/null 2>&1 && systemctl restart udpgw; sleep 2' || exit 1
 
 DOMAIN="id-sansvpnstore.cloud"
 
@@ -2118,10 +2118,11 @@ async def cb(u,c):
                 if (ed-datetime.now().date()).days < 0: continue
             except: continue
             accs.append(a)
-        hdr = ["<blockquote>","📁 <b>DAFTAR AKUN SAYA</b>","───────────────────────","",
-               f"📭 Total Akun : <b>{len(accs)}</b>",""]
-        if not accs: hdr += ["Belum ada akun premium.","Silakan buat akun terlebih dahulu.",""]
-        hdr += ["</blockquote>"]
+        hdr = ["📁 <b>DAFTAR AKUN SAYA</b>",
+               "───────────────────────"]
+        if not accs:
+            hdr += ["Belum ada akun premium",
+                    "Silakan buat akun terlebih dahulu."]
         if not accs:
             rows = [[B("➕ BUAT AKUN","buat_akun",style="primary")],[B("🔙 KEMBALI","menu|main",style="danger")]]
         else:
