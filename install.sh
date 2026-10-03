@@ -362,6 +362,121 @@ XRAYSVC
 # Restore SSH/WS/SSL services after certificate setup
 ( systemctl daemon-reload; systemctl enable ws-ssh ws-ssh-alt stunnel4 >/dev/null 2>&1; systemctl restart ws-ssh ws-ssh-alt stunnel4 ) & spin $! "Start SSH/SSL services"
 
+
+# 4b. SLOWDNS / DNSTT
+# Keep the existing bot/account UI unchanged. This block only installs and
+# starts the real DNSTT server and writes its metadata for bot.py to read.
+(
+  set -e
+  DNSTT_DIR=/etc/dnstt
+  DNSTT_BIN=/usr/local/bin/dnstt-server
+  DNSTT_PORT=5300
+  DNSTT_TUNNEL_DOMAIN="slow.${DOMAIN}"
+  DNSTT_NS_HOST="ns.${DOMAIN}"
+  BUILD_LOG=/tmp/sansxml-dnstt-build.log
+  KEY_LOG=/tmp/sansxml-dnstt-keygen.log
+  mkdir -p "$DNSTT_DIR"
+  chmod 700 "$DNSTT_DIR"
+  : > "$BUILD_LOG"
+  : > "$KEY_LOG"
+
+  # DNSTT is written in Go. Install the distro compiler when it is missing.
+  if ! command -v go >/dev/null 2>&1; then
+    apt-get update -y >>"$BUILD_LOG" 2>&1
+    apt-get install -y --no-install-recommends golang-go git ca-certificates >>"$BUILD_LOG" 2>&1
+  fi
+  command -v go >/dev/null 2>&1 || { echo "Go compiler tidak tersedia. Lihat $BUILD_LOG" >&2; exit 1; }
+  command -v git >/dev/null 2>&1 || { echo "Git tidak tersedia. Lihat $BUILD_LOG" >&2; exit 1; }
+
+  # Build only when the binary is not already usable.
+  if [ ! -x "$DNSTT_BIN" ] || ! "$DNSTT_BIN" -h >/dev/null 2>&1; then
+    rm -rf /tmp/dnstt-src
+    if ! git clone --depth=1 https://github.com/Mygod/dnstt.git /tmp/dnstt-src >>"$BUILD_LOG" 2>&1; then
+      echo "Gagal mengambil source DNSTT. Lihat $BUILD_LOG" >&2
+      exit 1
+    fi
+    cd /tmp/dnstt-src/dnstt-server
+    if ! CGO_ENABLED=0 go build -trimpath -o "$DNSTT_BIN" . >>"$BUILD_LOG" 2>&1; then
+      echo "Gagal compile DNSTT. Lihat $BUILD_LOG" >&2
+      exit 1
+    fi
+    chmod 0755 "$DNSTT_BIN"
+    rm -rf /tmp/dnstt-src
+  fi
+
+  # Never replace an existing private key. Generate a pair only when neither
+  # key exists, so reinstalling the SC cannot silently invalidate clients.
+  if [ ! -s "$DNSTT_DIR/server.key" ] && [ ! -s "$DNSTT_DIR/server.pub" ]; then
+    if ! "$DNSTT_BIN" -gen-key \
+      -privkey-file "$DNSTT_DIR/server.key" \
+      -pubkey-file "$DNSTT_DIR/server.pub" >>"$KEY_LOG" 2>&1; then
+      echo "Gagal membuat keypair DNSTT. Lihat $KEY_LOG" >&2
+      exit 1
+    fi
+  fi
+
+  # The bot must never advertise an empty/invalid key.
+  [ -s "$DNSTT_DIR/server.key" ] || { echo "DNSTT private key tidak ditemukan" >&2; exit 1; }
+  [ -s "$DNSTT_DIR/server.pub" ] || { echo "DNSTT public key tidak ditemukan" >&2; exit 1; }
+  SLOW_PUBKEY="$(grep -Eo '[0-9a-fA-F]{64}' "$DNSTT_DIR/server.pub" | head -n1 || true)"
+  echo "$SLOW_PUBKEY" | grep -Eq '^[0-9a-fA-F]{64}$' || { echo "DNSTT public key tidak valid" >&2; exit 1; }
+  chmod 600 "$DNSTT_DIR/server.key"
+  chmod 644 "$DNSTT_DIR/server.pub"
+
+  cat > "$DNSTT_DIR/config" << EOF
+SLOW_PORT=$DNSTT_PORT
+SLOW_TUNNEL_DOMAIN=$DNSTT_TUNNEL_DOMAIN
+SLOW_NS_HOST=$DNSTT_NS_HOST
+SLOW_DNS_AUTH_NS=$DNSTT_NS_HOST
+SLOW_PUBKEY=$SLOW_PUBKEY
+EOF
+  chmod 600 "$DNSTT_DIR/config"
+
+  # DNSTT listens on the unprivileged local port; external UDP/53 is redirected
+  # to it. Existing SSH/Xray/HTTP ports are untouched.
+  cat > /etc/systemd/system/dnstt-server.service << EOF
+[Unit]
+Description=SANSXML SlowDNS DNSTT Server
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=root
+ExecStart=$DNSTT_BIN -udp :$DNSTT_PORT -privkey-file $DNSTT_DIR/server.key $DNSTT_TUNNEL_DOMAIN 127.0.0.1:22
+Restart=always
+RestartSec=3
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  systemctl daemon-reload
+  systemctl enable dnstt-server >/dev/null 2>&1
+  systemctl restart dnstt-server
+  sleep 1
+  if ! systemctl is-active --quiet dnstt-server; then
+    echo "DNSTT gagal berjalan. Lihat: journalctl -u dnstt-server -n 50 --no-pager" >&2
+    systemctl --no-pager --full status dnstt-server >&2 || true
+    exit 1
+  fi
+
+  # Forward real DNS traffic from UDP/53 to DNSTT/5300.
+  iptables -C INPUT -p udp --dport "$DNSTT_PORT" -j ACCEPT 2>/dev/null || \
+    iptables -I INPUT -p udp --dport "$DNSTT_PORT" -j ACCEPT 2>/dev/null || true
+  iptables -t nat -C PREROUTING -p udp --dport 53 -j REDIRECT --to-ports "$DNSTT_PORT" 2>/dev/null || \
+    iptables -t nat -I PREROUTING -p udp --dport 53 -j REDIRECT --to-ports "$DNSTT_PORT" 2>/dev/null || true
+
+  # Save a human-readable DNS setup note; no bot/UI content is changed here.
+  cat > "$DNSTT_DIR/dns-records.txt" << EOF
+A    $DNSTT_NS_HOST    <IP-VPS>
+NS   $DNSTT_TUNNEL_DOMAIN    $DNSTT_NS_HOST
+EOF
+  echo "$SLOW_PUBKEY" > "$DNSTT_DIR/server.pub.txt"
+  chmod 644 "$DNSTT_DIR/server.pub.txt" "$DNSTT_DIR/dns-records.txt"
+) & spin $! "Install SlowDNS / DNSTT"
+
 # 5. BANNER
 # Backup files that this installer modifies so EXIT can restore them.
 mkdir -p /etc/sansxml-original
