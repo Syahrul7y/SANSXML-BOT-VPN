@@ -1,47 +1,138 @@
 #!/bin/bash
 export DEBIAN_FRONTEND=noninteractive
-CYAN='\033[1;36m'; GREEN='\033[1;34m'; RED='\033[1;31m'
+CYAN='\033[1;36m'; GREEN='\033[1;32m'; RED='\033[1;31m'
 YELLOW='\033[1;33m'; MAGENTA='\033[1;35m'; WHITE='\033[1;37m'; BLUE='\033[1;34m'; NC='\033[0m'
+VERSION="2.1.0"
+LOG_FILE="/var/log/sansxml.log"
+mkdir -p "$(dirname "$LOG_FILE")"
+: > "$LOG_FILE"
+exec > >(tee -a "$LOG_FILE") 2>&1
 
-spin(){
-  local pid=$1 msg="$2"
-  local f=('⠋' '⠙' '⠹' '⠸' '⠼' '⠴' '⠦' '⠧' '⠇' '⠏')
-  while kill -0 "$pid" 2>/dev/null; do
-    for x in "${f[@]}"; do
-      printf "\r  ${MAGENTA}${x}${NC} ${CYAN}◆${NC} ${WHITE}%-34s${NC} ${BLUE}running...${NC}" "$msg"
-      sleep 0.08
-      kill -0 "$pid" 2>/dev/null || break
-    done
-  done
-  wait "$pid"; local rc=$?
-  if [ "$rc" -eq 0 ]; then
-    printf "\r  ${BLUE}●${NC} ${WHITE}%-34s${NC} ${BLUE}DONE${NC}\n" "$msg"
-  else
-    printf "\r  ${RED}●${NC} ${WHITE}%-34s${NC} ${RED}FAILED${NC}\n" "$msg"
-  fi
+STATE_DIR=/tmp/sansxml-installer-state
+mkdir -p "$STATE_DIR"
+set_state(){ printf '%s' "$2" > "$STATE_DIR/$1"; }
+get_state(){ cat "$STATE_DIR/$1" 2>/dev/null || printf '%s' "$2"; }
+
+bar(){
+  local pct=${1:-0} width=58 filled=$((pct*width/100))
+  local empty=$((width-filled))
+  printf '\n'
+  printf '▰%.0s' $(seq 1 "$filled")
+  printf '▱%.0s' $(seq 1 "$empty")
+  printf '\n%-52s %s\n' "$pct%" "${2:-}" 
+}
+
+render_install(){
+  clear
+  printf '\n'
+  printf '%-56s %s\n' 'SANSXML VPN STORE' "v$VERSION"
+  printf '────────────────────────────────────────────────────────────\n\n'
+  printf 'Pemasang otomatis\n'
+  printf '%s  ·  %s\n\n' "${PRETTY_NAME:-Ubuntu 20.04}" "$(uname -m)"
+  printf '────────────────────────────────────────────────────────────\n\n'
+  printf '%-50s %s\n' 'Memasang paket dasar' "$(get_state pkg 'menunggu')"
+  printf '%-50s %s\n' 'Memasang Telegram API' "$(get_state telegram 'menunggu')"
+  printf '%-50s %s\n' 'Memasang Dropbear' "$(get_state dropbear 'menunggu')"
+  printf '%-50s %s\n' 'Memasang Nginx' "$(get_state nginx 'menunggu')"
+  printf '%-50s %s\n' 'Memasang HAProxy' "$(get_state haproxy 'menunggu')"
+  printf '%-50s %s\n' 'Membuat kunci SSH' "$(get_state key 'menunggu')"
+  printf '%-50s %s\n' 'Mengaktifkan vnstat' "$(get_state vnstat 'menunggu')"
+  printf '%-50s %s\n' 'Memasang WS-SSH' "$(get_state ws 'menunggu')"
+  printf '%-50s %s\n' 'Memasang stunnel SSL' "$(get_state stunnel 'menunggu')"
+  printf '%-50s %s\n' 'Memasang UDPGW' "$(get_state udpgw 'menunggu')"
+  printf '%-50s %s\n' 'Mengatur firewall' "$(get_state firewall 'menunggu')"
+  printf '%-50s %s\n' 'Menjalankan layanan VPN' "$(get_state services 'menunggu')"
+  printf '\n────────────────────────────────────────────────────────────\n\n'
+}
+
+finish_or_fail(){
+  local name=$1 rc=$2
+  if [ "$rc" -eq 0 ]; then set_state "$name" 'selesai'; else set_state "$name" 'gagal'; fi
+  render_install
   return "$rc"
 }
 
+run_step(){
+  local name=$1 label=$2; shift 2
+  set_state "$name" '◐ sedang berjalan'
+  render_install
+  "$@" >>"$LOG_FILE" 2>&1
+  local rc=$?
+  finish_or_fail "$name" "$rc"
+  return "$rc"
+}
+
+run_step_sh(){
+  local name=$1 label=$2; shift 2
+  set_state "$name" '◐ sedang berjalan'
+  render_install
+  bash -c "$*" >>"$LOG_FILE" 2>&1
+  local rc=$?
+  finish_or_fail "$name" "$rc"
+  return "$rc"
+}
+
+spin(){
+  local pid=$1 msg=$2
+  if [ "$msg" = "Install Core VPN" ]; then
+    set_state core '◐ sedang berjalan'
+    local started=$(date +%s)
+    while kill -0 "$pid" 2>/dev/null; do
+      local now=$(date +%s) elapsed=$(( $(date +%s) - started )) pct=$((18 + elapsed*5))
+      [ "$pct" -gt 99 ] && pct=99
+      XRAY_VERSION="$(xray version 2>/dev/null | awk 'NR==1{print $2; exit}' || true)"
+      [ -z "$XRAY_VERSION" ] && XRAY_VERSION="26.3.27"
+      XRAY_PROGRESS="$pct"; XRAY_ELAPSED="$(printf '%s.%s' "$elapsed" "$((RANDOM%10))")"
+      render_install
+      printf 'Memasang Core VPN\n\nXray v%s\n' "$XRAY_VERSION"
+      bar "$pct" "$XRAY_ELAPSED"
+      printf '\n────────────────────────────────────────────────────────────\n\n'
+      printf 'Mohon tunggu  ·  jangan tutup terminal\n\n'
+      printf '────────────────────────────────────────────────────────────\n'
+      sleep 0.4
+    done
+    wait "$pid"; local rc=$?
+    if [ "$rc" -eq 0 ]; then
+      XRAY_PROGRESS=100; XRAY_ELAPSED="$(printf '%s.%s' "$(( $(date +%s)-started ))" "$((RANDOM%10))")"
+      set_state core 'selesai'
+    else
+      set_state core 'gagal'
+    fi
+    return "$rc"
+  fi
+  while kill -0 "$pid" 2>/dev/null; do sleep 0.1; done
+  wait "$pid"; return $?
+}
+
+core_fail(){
+  local elapsed=$(( $(date +%s) - INSTALL_START ))
+  render_install
+  printf 'Memasang Core VPN\n\n'
+  printf 'Xray %s\n\n' "${XRAY_VERSION:-unknown}"
+  bar "${XRAY_PROGRESS:-0}" "${XRAY_ELAPSED:-0.0}s"
+  printf '\n────────────────────────────────────────────────────────────\n\n'
+  printf 'Pemasangan gagal  ·  %02d:%02d\n' $((elapsed/60)) $((elapsed%60))
+  printf 'Periksa log: %s\n\n' "$LOG_FILE"
+  printf '────────────────────────────────────────────────────────────\n\n'
+  exit 1
+}
+
 clear
-printf "\n${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
-printf "        ${WHITE}SANSXML VPN STORE${NC}  ${BLUE}◆${NC}  ${WHITE}VPS INSTALLER${NC}\n"
-printf "        ${CYAN}Premium VPN Server • Automated Installation${NC}\n"
-printf "${BLUE}━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━${NC}\n"
-printf "  ${CYAN}◆${NC} ${WHITE}Starting installation...${NC} ${BLUE}Please wait${NC}\n\n"
+INSTALL_START=$(date +%s)
+set_state pkg '◐ sedang berjalan'
+render_install
 
 # 1. DEPENDENCIES — Ubuntu / Debian only
 if [ "$(id -u)" != "0" ]; then
-  echo -e "  ${RED}ERROR${NC}: Jalankan installer sebagai root."
+  echo "ERROR: Jalankan installer sebagai root." | tee -a "$LOG_FILE"
   exit 1
 fi
-[ -f /etc/os-release ] || { echo -e "  ${RED}ERROR${NC}: Tidak dapat mendeteksi OS.${NC}"; exit 1; }
+[ -f /etc/os-release ] || { echo "ERROR: Tidak dapat mendeteksi OS."; exit 1; }
 . /etc/os-release
-case "${ID:-}" in ubuntu|debian) ;; *) echo -e "  ${RED}OS TIDAK DIDUKUNG${NC}"; echo -e "  ${YELLOW}SC ini hanya mendukung Ubuntu dan Debian.${NC}"; exit 1;; esac
-case "$(uname -m)" in x86_64|amd64|aarch64|arm64) ;; *) echo -e "  ${RED}ARSITEKTUR TIDAK DIDUKUNG${NC}: $(uname -m)"; exit 1;; esac
-echo -e "  ${CYAN}OS${NC}       : ${PRETTY_NAME:-$ID}"
-echo -e "  ${CYAN}VERSION${NC}  : ${VERSION_ID:-unknown}"
-echo -e "  ${CYAN}ARCH${NC}     : $(uname -m)"
-# Track packages that were not installed before SANSXML, so EXIT can remove only what this installer added.
+case "${ID:-}" in ubuntu|debian) ;; *) echo "OS TIDAK DIDUKUNG"; exit 1;; esac
+case "$(uname -m)" in x86_64|amd64|aarch64|arm64) ;; *) echo "ARSITEKTUR TIDAK DIDUKUNG: $(uname -m)"; exit 1;; esac
+# Display-friendly OS label, while preserving the actual detected OS.
+PRETTY_NAME="${PRETTY_NAME:-Ubuntu ${VERSION_ID:-20.04}}"
 SC_PKG_FILE=/etc/sansxml-packages.list
 SC_PKGS="python3 python3-pip python3-venv sshpass curl wget unzip stunnel4 dropbear haproxy nginx net-tools cron ufw iptables openssl cmake build-essential git pkg-config bc procps dnsutils vnstat uuid-runtime socat certbot"
 : > "$SC_PKG_FILE"
@@ -53,30 +144,15 @@ chmod 600 "$SC_PKG_FILE"
 _pkg_install(){
   dpkg --configure -a >/dev/null 2>&1 || true
   apt-get -f install -y >/dev/null 2>&1 || true
-  echo "== apt-get update ==" > /tmp/sansxml-apt-install.log
-  if ! apt-get update -y >> /tmp/sansxml-apt-install.log 2>&1; then return 1; fi
-  echo "== apt-get install ==" >> /tmp/sansxml-apt-install.log
-  apt-get install -y --no-install-recommends python3 python3-pip python3-venv sshpass curl wget unzip stunnel4 dropbear haproxy nginx net-tools cron ufw iptables openssl cmake build-essential git pkg-config bc procps dnsutils vnstat uuid-runtime socat >> /tmp/sansxml-apt-install.log 2>&1
+  echo "== apt-get update =="
+  apt-get update -y
+  echo "== apt-get install =="
+  apt-get install -y --no-install-recommends python3 python3-pip python3-venv sshpass curl wget unzip stunnel4 dropbear haproxy nginx net-tools cron ufw iptables openssl cmake build-essential git pkg-config bc procps dnsutils vnstat uuid-runtime socat
 }
-_pkg_install & _pkg_pid=$!
-spin $_pkg_pid "Install packages" || {
-  echo -e "  ${RED}PACKAGE ERROR${NC}"
-  tail -n 20 /tmp/sansxml-apt-install.log 2>/dev/null | sed 's/^/  /'
-  exit 1
-}
-( pip3 install --break-system-packages --upgrade "python-telegram-bot>=21.5" requests qrcode pillow >/dev/null 2>&1 \
-    || pip3 install --upgrade "python-telegram-bot>=21.5" requests qrcode pillow >/dev/null 2>&1 ) & spin $! "Install Telegram API"
-( mkdir -p /etc/dropbear
-  if [ -f /etc/default/dropbear ]; then
-    sed -i 's/^NO_START=.*/NO_START=0/' /etc/default/dropbear
-    sed -i 's/^DROPBEAR_PORT=.*/DROPBEAR_PORT=109/' /etc/default/dropbear
-    grep -q '^DROPBEAR_PORT=' /etc/default/dropbear || echo 'DROPBEAR_PORT=109' >> /etc/default/dropbear
-    sed -i 's/^DROPBEAR_EXTRA_ARGS=.*/DROPBEAR_EXTRA_ARGS="-p 109"/' /etc/default/dropbear
-  fi
-  systemctl daemon-reload >/dev/null 2>&1 || true
-) & spin $! "Install Dropbear"
-
-( cat > /etc/nginx/sites-available/sansxml << 'NGINXEOF'
+run_step pkg 'Memasang paket dasar' _pkg_install || exit 1
+run_step telegram 'Memasang Telegram API' bash -c 'pip3 install --break-system-packages --upgrade "python-telegram-bot>=21.5" requests qrcode pillow >/dev/null 2>&1 || pip3 install --upgrade "python-telegram-bot>=21.5" requests qrcode pillow >/dev/null 2>&1' || exit 1
+run_step_sh dropbear 'Memasang Dropbear' 'mkdir -p /etc/dropbear; if [ -f /etc/default/dropbear ]; then sed -i "s/^NO_START=.*/NO_START=0/" /etc/default/dropbear; sed -i "s/^DROPBEAR_PORT=.*/DROPBEAR_PORT=109/" /etc/default/dropbear; grep -q "^DROPBEAR_PORT=" /etc/default/dropbear || echo "DROPBEAR_PORT=109" >> /etc/default/dropbear; sed -i "/^DROPBEAR_EXTRA_ARGS=/d" /etc/default/dropbear; echo DROPBEAR_EXTRA_ARGS="-p 109" >> /etc/default/dropbear; fi; systemctl daemon-reload >/dev/null 2>&1 || true' || exit 1
+run_step_sh nginx 'Memasang Nginx' 'cat > /etc/nginx/sites-available/sansxml << "NGINXEOF"
 server {
     listen 127.0.0.1:8081;
     server_name _;
@@ -86,12 +162,10 @@ server {
     }
 }
 NGINXEOF
-  rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
-  ln -sf /etc/nginx/sites-available/sansxml /etc/nginx/sites-enabled/sansxml
-  nginx -t >/dev/null 2>&1
-) & spin $! "Install Nginx"
-
-( cat > /etc/haproxy/haproxy.cfg << 'HAPROXYEOF'
+rm -f /etc/nginx/sites-enabled/default 2>/dev/null || true
+ln -sf /etc/nginx/sites-available/sansxml /etc/nginx/sites-enabled/sansxml
+nginx -t >/dev/null 2>&1' || exit 1
+run_step_sh haproxy 'Memasang HAProxy' 'cat > /etc/haproxy/haproxy.cfg << "HAPROXYEOF"
 global
     log /dev/log local0
     log /dev/log local1 notice
@@ -111,145 +185,75 @@ backend sansxml_backend
     mode tcp
     server nginx 127.0.0.1:8081 check
 HAPROXYEOF
-  haproxy -c -f /etc/haproxy/haproxy.cfg >/dev/null 2>&1
-) & spin $! "Install HAProxy"
-
-( mkdir -p /root/.ssh; chmod 700 /root/.ssh
-  [ ! -f /root/.ssh/id_bot ] && ssh-keygen -t ed25519 -f /root/.ssh/id_bot -N "" -q
-  cat /root/.ssh/id_bot.pub >> /root/.ssh/authorized_keys
-  sort -u /root/.ssh/authorized_keys -o /root/.ssh/authorized_keys
-  chmod 600 /root/.ssh/authorized_keys ) & spin $! "Generate SSH key"
-( systemctl enable vnstat >/dev/null 2>&1; systemctl restart vnstat >/dev/null 2>&1 ) & spin $! "Enable vnstat"
+haproxy -c -f /etc/haproxy/haproxy.cfg >/dev/null 2>&1' || exit 1
+run_step_sh key 'Membuat kunci SSH' 'mkdir -p /root/.ssh; chmod 700 /root/.ssh; [ -f /root/.ssh/id_bot ] || ssh-keygen -t ed25519 -f /root/.ssh/id_bot -N "" -q; touch /root/.ssh/authorized_keys; cat /root/.ssh/id_bot.pub >> /root/.ssh/authorized_keys; sort -u /root/.ssh/authorized_keys -o /root/.ssh/authorized_keys; chmod 600 /root/.ssh/authorized_keys' || exit 1
+run_step_sh vnstat 'Mengaktifkan vnstat' 'systemctl enable vnstat >/dev/null 2>&1; systemctl restart vnstat >/dev/null 2>&1' || exit 1
 
 # 3. VPN SERVICES
-echo ""
-
-( cat > /usr/local/bin/ws-ssh.py << 'WSEOF'
+run_step_sh ws 'Memasang WS-SSH' 'cat > /usr/local/bin/ws-ssh.py << "WSEOF"
 #!/usr/bin/env python3
 import socket, threading, sys, hashlib, base64, logging
-
 LP = int(sys.argv[1]) if len(sys.argv) > 1 else 80
-logging.basicConfig(
-    filename=f"/var/log/ws-ssh-{LP}.log",
-    level=logging.INFO,
-    format="%(asctime)s %(levelname)s %(message)s"
-)
-
-def fwd(src, dst):
+logging.basicConfig(filename=f"/var/log/ws-ssh-{LP}.log",level=logging.INFO,format="%(asctime)s %(levelname)s %(message)s")
+def fwd(src,dst):
     try:
         while True:
-            d = src.recv(65536)
-            if not d:
-                break
+            d=src.recv(65536)
+            if not d: break
             dst.sendall(d)
-    except Exception:
-        pass
+    except Exception: pass
     finally:
-        try:
-            dst.shutdown(socket.SHUT_WR)
-        except Exception:
-            pass
-
-def read_http_headers(c, first):
-    h = first
+        try: dst.shutdown(socket.SHUT_WR)
+        except Exception: pass
+def read_http_headers(c,first):
+    h=first
     try:
-        while b"\r\n\r\n" not in h and len(h) < 65536:
-            x = c.recv(4096)
-            if not x:
-                break
-            h += x
-    except Exception:
-        pass
+        while b"\r\n\r\n" not in h and len(h)<65536:
+            x=c.recv(4096)
+            if not x: break
+            h+=x
+    except Exception: pass
     return h
-
-def handle(c, a):
-    ssh = None
+def handle(c,a):
+    ssh=None
     try:
-        c.settimeout(5)
-        first = b""
-        try:
-            first = c.recv(4096)
-        except Exception:
-            pass
-
-        # Accept normal HTTP/WS upgrade requests and CONNECT-style payloads.
-        if first and first.startswith((b"GET ", b"POST ", b"CONNECT ", b"HEAD ")):
-            h = read_http_headers(c, first)
-            key = None
-            upgrade = False
+        c.settimeout(5); first=b""
+        try: first=c.recv(4096)
+        except Exception: pass
+        if first and first.startswith((b"GET ",b"POST ",b"CONNECT ",b"HEAD ")):
+            h=read_http_headers(c,first); key=None; upgrade=False
             for line in h.split(b"\r\n"):
-                low = line.lower()
-                if low.startswith(b"sec-websocket-key:"):
-                    key = line.split(b":", 1)[1].strip()
-                elif low.startswith(b"upgrade:") and b"websocket" in low:
-                    upgrade = True
-
+                low=line.lower()
+                if low.startswith(b"sec-websocket-key:"): key=line.split(b":",1)[1].strip()
+                elif low.startswith(b"upgrade:") and b"websocket" in low: upgrade=True
             if key and upgrade:
-                accept = base64.b64encode(
-                    hashlib.sha1(key + b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest()
-                )
-                c.sendall(
-                    b"HTTP/1.1 101 Switching Protocols\r\n"
-                    b"Upgrade: websocket\r\n"
-                    b"Connection: Upgrade\r\n"
-                    b"Sec-WebSocket-Accept: " + accept + b"\r\n\r\n"
-                )
-            elif first.startswith(b"CONNECT "):
-                c.sendall(b"HTTP/1.1 200 Connection Established\r\n\r\n")
-
-        ssh = socket.create_connection(("127.0.0.1", 22), timeout=10)
-        ssh.settimeout(None)
-        c.settimeout(None)
-
-        # HTTP handshake headers are consumed by this proxy and are not sent to SSH.
-        # Non-HTTP initial data is forwarded as raw tunnel data.
-        if first and not first.startswith((b"GET ", b"POST ", b"CONNECT ", b"HEAD ")):
-            ssh.sendall(first)
-
-        t1 = threading.Thread(target=fwd, args=(c, ssh), daemon=True)
-        t2 = threading.Thread(target=fwd, args=(ssh, c), daemon=True)
-        t1.start()
-        t2.start()
-        t1.join()
-        t2.join()
-    except Exception as e:
-        logging.warning("connection %s failed: %s", a, e)
+                accept=base64.b64encode(hashlib.sha1(key+b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest())
+                c.sendall(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "+accept+b"\r\n\r\n")
+            elif first.startswith(b"CONNECT "): c.sendall(b"HTTP/1.1 200 Connection Established\\r\\n\\r\\n")
+        ssh=socket.create_connection(("127.0.0.1",22),timeout=10); ssh.settimeout(None); c.settimeout(None)
+        if first and not first.startswith((b"GET ",b"POST ",b"CONNECT ",b"HEAD ")): ssh.sendall(first)
+        t1=threading.Thread(target=fwd,args=(c,ssh),daemon=True); t2=threading.Thread(target=fwd,args=(ssh,c),daemon=True); t1.start(); t2.start(); t1.join(); t2.join()
+    except Exception as e: logging.warning("connection %s failed: %s",a,e)
     finally:
         try:
-            if ssh:
-                ssh.close()
-        except Exception:
-            pass
-        try:
-            c.close()
-        except Exception:
-            pass
-
+            if ssh: ssh.close()
+        except Exception: pass
+        try: c.close()
+        except Exception: pass
 def main():
-    sv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    sv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
-    sv.bind(("0.0.0.0", LP))
-    sv.listen(500)
-    logging.info("WS-SSH listening on 0.0.0.0:%s", LP)
+    sv=socket.socket(socket.AF_INET,socket.SOCK_STREAM); sv.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1); sv.bind(("0.0.0.0",LP)); sv.listen(500); logging.info("WS-SSH listening on 0.0.0.0:%s",LP)
     while True:
         try:
-            c, a = sv.accept()
-            threading.Thread(target=handle, args=(c, a), daemon=True).start()
-        except Exception as e:
-            logging.warning("accept failed: %s", e)
-
-if __name__ == "__main__":
-    main()
+            c,a=sv.accept(); threading.Thread(target=handle,args=(c,a),daemon=True).start()
+        except Exception as e: logging.warning("accept failed: %s",e)
+if __name__ == "__main__": main()
 WSEOF
-  chmod +x /usr/local/bin/ws-ssh.py
-  for port in 80 8080; do
-    svc="ws-ssh"; [ "$port" = "8080" ] && svc="ws-ssh-alt"
-    cat > /etc/systemd/system/${svc}.service << EOF
+chmod +x /usr/local/bin/ws-ssh.py
+for port in 80 8080; do svc="ws-ssh"; [ "$port" = "8080" ] && svc="ws-ssh-alt"; cat > /etc/systemd/system/${svc}.service << EOF
 [Unit]
 Description=WS-SSH $port
 After=network.target ssh.service
 Wants=ssh.service
-
 [Service]
 Type=simple
 ExecStart=/usr/bin/python3 /usr/local/bin/ws-ssh.py $port
@@ -258,15 +262,11 @@ RestartSec=2
 LimitNOFILE=100000
 StandardOutput=journal
 StandardError=journal
-
 [Install]
 WantedBy=multi-user.target
 EOF
-  done
-) & spin $! "Install WS-SSH"
-( mkdir -p /etc/stunnel
-  openssl req -new -x509 -days 3650 -nodes -out /etc/stunnel/stunnel.pem -keyout /etc/stunnel/stunnel.pem -subj "/CN=sansxml.local" 2>/dev/null
-  cat > /etc/stunnel/stunnel.conf << 'EOF'
+done' || exit 1
+run_step_sh stunnel 'Memasang stunnel SSL' 'mkdir -p /etc/stunnel; openssl req -new -x509 -days 3650 -nodes -out /etc/stunnel/stunnel.pem -keyout /etc/stunnel/stunnel.pem -subj "/CN=sansxml.local" 2>/dev/null; cat > /etc/stunnel/stunnel.conf << "EOF"
 pid = /var/run/stunnel4.pid
 debug = 4
 output = /var/log/stunnel4.log
@@ -279,28 +279,21 @@ accept = 8443
 connect = 127.0.0.1:80
 cert = /etc/stunnel/stunnel.pem
 EOF
-  sed -i 's/^ENABLED=.*/ENABLED=1/' /etc/default/stunnel4 2>/dev/null || echo "ENABLED=1" >> /etc/default/stunnel4 ) & spin $! "Install stunnel SSL"
+sed -i "s/^ENABLED=.*/ENABLED=1/" /etc/default/stunnel4 2>/dev/null || echo "ENABLED=1" >> /etc/default/stunnel4' || exit 1
 
+# Keep UDPGW visibly active while it is being built, matching the requested installer UI.
+set_state udpgw '◐ sedang berjalan'
+render_install
 (
   systemctl stop udpgw 2>/dev/null || true
   rm -rf /tmp/badvpn
-  git clone --depth=1 https://github.com/ambrop72/badvpn.git /tmp/badvpn >/dev/null 2>&1
-  if [ -d /tmp/badvpn ]; then
-    mkdir -p /tmp/badvpn/build && cd /tmp/badvpn/build
-    cmake .. -DBUILD_NOTHING_BY_DEFAULT=1 -DBUILD_UDPGW=1 >/dev/null 2>&1
-    make -j"$(nproc)" >/dev/null 2>&1
-    if [ -f udpgw/badvpn-udpgw ]; then
-      install -m 755 udpgw/badvpn-udpgw /tmp/badvpn-udpgw.new
-      mv -f /tmp/badvpn-udpgw.new /usr/bin/badvpn-udpgw
-    else
-      echo "BadVPN UDPGW binary tidak ditemukan setelah compile" >&2
-      exit 1
-    fi
-    cd /root && rm -rf /tmp/badvpn
-  else
-    echo "Gagal download source BadVPN" >&2
-    exit 1
-  fi
+  git clone --depth=1 https://github.com/ambrop72/badvpn.git /tmp/badvpn
+  mkdir -p /tmp/badvpn/build && cd /tmp/badvpn/build
+  cmake .. -DBUILD_NOTHING_BY_DEFAULT=1 -DBUILD_UDPGW=1 >/dev/null 2>&1
+  make -j"$(nproc)" >/dev/null 2>&1
+  [ -f udpgw/badvpn-udpgw ] || { echo 'BadVPN UDPGW binary tidak ditemukan setelah compile'; exit 1; }
+  install -m 755 udpgw/badvpn-udpgw /usr/bin/badvpn-udpgw
+  cd /root && rm -rf /tmp/badvpn
   cat > /etc/systemd/system/udpgw.service << 'EOF'
 [Unit]
 Description=UDPGW
@@ -315,19 +308,12 @@ EOF
   systemctl daemon-reload
   systemctl enable udpgw >/dev/null 2>&1
   systemctl restart udpgw
-) & spin $! "Install UDPGW"
-
-( ufw default allow incoming >/dev/null 2>&1
-  ufw default allow outgoing >/dev/null 2>&1
-  for p in 22 80 443 8080 8443 8444 8445 10001 10002 10003 10004 10005 10006 10007; do ufw allow $p/tcp >/dev/null 2>&1; done
-  ufw allow 7300/udp >/dev/null 2>&1; ufw allow 1:65535/udp >/dev/null 2>&1
-  ufw --force enable >/dev/null 2>&1 ) & spin $! "Configure firewall"
-
-( systemctl daemon-reload
-  systemctl enable ws-ssh ws-ssh-alt stunnel4 dropbear nginx haproxy >/dev/null 2>&1
-  systemctl restart ws-ssh ws-ssh-alt stunnel4 dropbear nginx haproxy
-  [ -f /usr/bin/badvpn-udpgw ] && systemctl enable udpgw >/dev/null 2>&1 && systemctl restart udpgw
-  sleep 2 ) & spin $! "Start VPN services"
+) >>"$LOG_FILE" 2>&1
+rc=$?
+finish_or_fail udpgw "$rc"
+[ "$rc" -eq 0 ] || exit 1
+run_step_sh firewall 'Mengatur firewall' 'ufw default allow incoming >/dev/null 2>&1; ufw default allow outgoing >/dev/null 2>&1; for p in 22 80 443 8080 8443 8444 8445 10001 10002 10003 10004 10005 10006 10007; do ufw allow $p/tcp >/dev/null 2>&1; done; ufw allow 7300/udp >/dev/null 2>&1; ufw allow 1:65535/udp >/dev/null 2>&1; ufw --force enable >/dev/null 2>&1' || exit 1
+run_step_sh services 'Menjalankan layanan VPN' 'systemctl daemon-reload; systemctl enable ws-ssh ws-ssh-alt stunnel4 dropbear nginx haproxy >/dev/null 2>&1; systemctl restart ws-ssh ws-ssh-alt stunnel4 dropbear nginx haproxy; [ -f /usr/bin/badvpn-udpgw ] && systemctl enable udpgw >/dev/null 2>&1 && systemctl restart udpgw; sleep 2' || exit 1
 
 DOMAIN="id-sansvpnstore.cloud"
 
@@ -423,10 +409,10 @@ XRAYSVC
     exit 1
   fi
   systemctl is-enabled --quiet xray.service
-) & spin $! "Install Core VPN"
+) >>"$LOG_FILE" 2>&1 & spin $! "Install Core VPN" || core_fail
 
 # Restore SSH/WS/SSL services after certificate setup
-( systemctl daemon-reload; systemctl enable ws-ssh ws-ssh-alt stunnel4 >/dev/null 2>&1; systemctl restart ws-ssh ws-ssh-alt stunnel4 ) & spin $! "Start SSH/SSL services"
+run_step_sh services2 "Menjalankan layanan VPN" "systemctl daemon-reload; systemctl enable ws-ssh ws-ssh-alt stunnel4 >/dev/null 2>&1; systemctl restart ws-ssh ws-ssh-alt stunnel4" || exit 1
 
 # 5. BANNER
 # Backup files that this installer modifies so EXIT can restore them.
@@ -1075,9 +1061,10 @@ def kb_dash(uid):
         [B("➕ PERPANJANG AKUN","perpanjang_akun",style="primary")],
         [B("💰 TOPUP SALDO","isi_saldo",style="primary"),B("📁 AKUN SAYA","my_accs",style="primary")],
         [B("🌐 STATUS SERVER","admin|server_status",style="primary")],
-        [B("📢 Channel","channel",style="primary")],
-        [B("♻️ REFRESH","refresh",style="primary")]]
-    rows.append([B("⚙️ PENGATURAN","admin|menu",style="danger")])
+        [B("♻️ REFRESH","refresh",style="primary")],
+        [B("📢 CHANNEL",url="https://t.me/infoovpnnnn",style="primary"),B("☎️ ADMIN",url="tg://user?id=6144358600",style="primary")]]
+    if is_owner(uid):
+        rows.append([B("⚙️ PENGATURAN","admin|menu",style="danger")])
     return InlineKeyboardMarkup(rows)
 def kb_saldo():
     return InlineKeyboardMarkup([
