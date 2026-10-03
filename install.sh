@@ -2594,15 +2594,16 @@ center_text(){
     (( pad < 0 )) && pad=0
     printf "%*s%s\n" "$pad" "" "$text"
 }
-show_banner(){
+show_banner(){ clear
     local os kernel cpu load ram disk up now ip bot ws ssl udp xry ngx drp hap
-    local sshc vmc vlc trc total onl city isp country geo
+    local sshc vmc vlc trc total onl city isp country geo today month speed upv downv tv
+    local BOX=42 INNER=40
     os=$(grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"')
     kernel=$(uname -r 2>/dev/null)
     cpu=$(nproc 2>/dev/null || echo 0)
     load=$(awk '{print $1" "$2" "$3}' /proc/loadavg 2>/dev/null)
     ram=$(get_ram_pct); disk=$(get_disk_pct); up=$(get_uptime)
-    now=$(date '+%d %b %Y  %H:%M:%S')
+    now=$(date '+%d %b %Y • %H:%M:%S')
     ip=$(get_ip)
     geo=$(get_city_isp); IFS="|" read -r city isp country <<< "$geo"
     bot=$(systemctl is-active vpnbot 2>/dev/null); ws=$(systemctl is-active ws-ssh 2>/dev/null)
@@ -2611,31 +2612,62 @@ show_banner(){
     drp=$(systemctl is-active dropbear 2>/dev/null); hap=$(systemctl is-active haproxy 2>/dev/null)
     sshc=$(get_ssh_count); vmc=$(get_xray_count vmess); vlc=$(get_xray_count vless); trc=$(get_xray_count trojan)
     total=$((sshc+vmc+vlc+trc)); onl=$(get_online)
+    today=$(get_traffic_pair d); month=$(get_traffic_pair m); downv=$(awk '{print $1}' <<< "$today"); upv=$(awk '{print $2}' <<< "$today"); tv=$(awk '{print $3}' <<< "$today"); speed=$(get_speed 2>/dev/null)
 
     echo ""
     center_text "──✦ SCRIPT AUTO INSTAL VPN V2.1 ✦──" 62
-    center_text "$(printf '%s' "$now" | sed 's/  / • /')" 62
+    center_text "$now" 62
     echo ""
 
-    printf "${WH}╭─ SERVER ─────────────────────────────────────────────────────╮${N}\n"
-    printf "${WH}│${N} ${GY}OS${N}       ${WH}%-20s${N}   ${GY}CPU${N}    ${WH}%s vCPU${N}                 ${WH}│${N}\n" "$os" "$cpu"
-    printf "${WH}│${N} ${GY}KERNEL${N}   ${WH}%-20s${N}   ${GY}LOAD${N}   ${WH}%-17s${N} ${WH}│${N}\n" "$kernel" "$load"
-    printf "${WH}│${N} ${GY}RAM${N}      ${WH}%s %3s%%${N}       ${GY}DISK${N}   ${WH}%s %3s%%${N}       ${WH}│${N}\n" "$(bar "$ram")" "$ram" "$(bar "$disk")" "$disk"
-    printf "${WH}│${N} ${GY}UPTIME${N}   ${WH}%-20s${N}                              ${WH}│${N}\n" "$up"
-    printf "${WH}│${N} ${GY}IP${N}       ${WH}%-20s${N}   ${GY}ISP${N}    ${WH}%-27s${N} ${WH}│${N}\n" "$ip" "${isp:0:27}"
-    printf "${WH}│${N} ${GY}CITY${N}     ${WH}%-20s${N}   ${GY}COUNTRY${N} ${WH}%-10s${N} ${WH}│${N}\n" "$city" "$country 🇮🇩"
-    printf "${WH}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
+    # SERVER INFORMATION
+    printf "${WH}╭%*s╮${N}\n" "$INNER" '' | sed 's/ /─/g'
+    center_text "🖥️ SERVER INFORMATION" "$((BOX+2))"
+    printf "${WH}│${N} ${WH}├─ OS       %-29s${N}${WH}│${N}\n" "${os:0:29}"
+    printf "${WH}│${N} ${WH}├─ Kernel   %-29s${N}${WH}│${N}\n" "${kernel:0:29}"
+    printf "${WH}│${N} ${WH}├─ RAM      %s %3s%%${N}%*s${WH}│${N}\n" "$(bar "$ram")" "$ram" $((15-${#ram})) ''
+    printf "${WH}│${N} ${WH}├─ Disk     %s %3s%%${N}%*s${WH}│${N}\n" "$(bar "$disk")" "$disk" $((15-${#disk})) ''
+    printf "${WH}│${N} ${WH}└─ Uptime   %-29s${N}${WH}│${N}\n" "$up"
+    printf "${WH}╰%*s╯${N}\n" "$INNER" '' | sed 's/ /─/g'
+    echo ""
 
-    printf "${WH}╭─ SERVICES ───────────────────────────────────────────────────╮${N}\n"
-    printf "${WH}│${N} ${WH}%b BOT TELEGRAM${N}  ${WH}%b SSH-WS${N}  ${WH}%b SSL${N}  ${WH}%b UDP${N}  ${WH}%b NGIX${N}  ${WH}%b XRAY${N} ${WH}│${N}\n" \
-      "$(status_dot "$bot")" "$(status_dot "$ws")" "$(status_dot "$ssl")" "$(status_dot "$udp")" "$(status_dot "$ngx")" "$(status_dot "$xry")"
-    printf "${WH}│${N} ${WH}%b DROPBEAR${N}  ${WH}%b HAPROXY${N}                                      ${WH}│${N}\n" \
-      "$(status_dot "$drp")" "$(status_dot "$hap")"
-    printf "${WH}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
+    # NETWORK
+    printf "${WH}╭%*s╮${N}\n" "$INNER" '' | sed 's/ /─/g'
+    center_text "🌐 NETWORK" "$((BOX+2))"
+    printf "${WH}│${N} ${WH}├─ IP       %-29s${N}${WH}│${N}\n" "${ip:0:29}"
+    printf "${WH}│${N} ${WH}├─ ISP      %-29s${N}${WH}│${N}\n" "${isp:0:29}"
+    printf "${WH}│${N} ${WH}└─ Country  %-29s${N}${WH}│${N}\n" "${country:-Indonesia}"
+    printf "${WH}╰%*s╯${N}\n" "$INNER" '' | sed 's/ /─/g'
+    echo ""
 
-    printf "${WH}╭─ ACCOUNTS ───────────────────────────────────────────────────╮${N}\n"
-    printf "${WH}│${N} ${GY}SSH${N} %-4s  ${GY}VMESS${N} %-4s  ${GY}VLESS${N} %-4s  ${GY}TROJAN${N} %-4s  ${GY}TOTAL${N} %-4s ${WH}│${N}\n" "$sshc" "$vmc" "$vlc" "$trc" "$total"
-    printf "${WH}╰──────────────────────────────────────────────────────────────╯${N}\n"
+    # SERVICES
+    printf "${WH}╭%*s╮${N}\n" "$INNER" '' | sed 's/ /─/g'
+    center_text "⚙️ SERVICES" "$((BOX+2))"
+    printf "${WH}│${N} ${WH}├─ SSH${N}                                       ${WH}│${N}\n"
+    printf "${WH}│${N} ${WH}├─ UDP${N}                                       ${WH}│${N}\n"
+    printf "${WH}│${N} ${WH}├─ SSL${N}                                       ${WH}│${N}\n"
+    printf "${WH}│${N} ${WH}├─ Nginx${N}                                     ${WH}│${N}\n"
+    printf "${WH}│${N} ${WH}├─ Xray${N}                                      ${WH}│${N}\n"
+    printf "${WH}│${N} ${WH}├─ Dropbear${N}                                  ${WH}│${N}\n"
+    printf "${WH}│${N} ${WH}├─ HAProxy${N}                                   ${WH}│${N}\n"
+    printf "${WH}│${N} ${WH}└─ Trojan${N}                                    ${WH}│${N}\n"
+    printf "${WH}╰%*s╯${N}\n" "$INNER" '' | sed 's/ /─/g'
+    echo ""
+
+    # TRAFFIC
+    printf "${WH}╭%*s╮${N}\n" "$INNER" '' | sed 's/ /─/g'
+    center_text "📊 TRAFFIC" "$((BOX+2))"
+    printf "${WH}│${N} ${WH}├─ Upload     %-10s   Download  %-10s${N} ${WH}│${N}\n" "$upv" "$downv"
+    printf "${WH}│${N} ${WH}├─ Total      %-10s   Bandwidth %-9s${N} ${WH}│${N}\n" "$tv" "N/A"
+    printf "${WH}│${N} ${WH}└─ Speed      %-29s${N}${WH}│${N}\n" "$speed"
+    printf "${WH}╰%*s╯${N}\n" "$INNER" '' | sed 's/ /─/g'
+    echo ""
+
+    # ACCOUNTS
+    printf "${WH}╭%*s╮${N}\n" "$INNER" '' | sed 's/ /─/g'
+    center_text "👤 ACCOUNTS" "$((BOX+2))"
+    printf "${WH}│${N} ${WH}├─ VMESS %s • VLESS %s • TROJAN %s${N}  ${WH}│${N}\n" "$vmc" "$vlc" "$trc"
+    printf "${WH}│${N} ${WH}└─ SSH %s • TOTAL %s${N}                          ${WH}│${N}\n" "$sshc" "$total"
+    printf "${WH}╰%*s╯${N}\n" "$INNER" '' | sed 's/ /─/g'
 }
 status_dot(){ [ "$1" = "active" ] && printf "${GR}●${N}" || printf "${RE}●${N}"; }
 get_xray_count(){
@@ -2879,14 +2911,32 @@ reset_github_backup(){
 }
 
 
-show_menu(){ clear
+show_menu(){
+    clear
     show_banner
-    printf "\n${WH}╭─ MENU ───────────────────────────────────────────────────────╮${N}\n"
-    printf " ${CY}[1]${N}  ${WH}DAFTAR USER${N}             ${CY}[4]${N}  ${WH}CEK SERVICE${N}\n"
-    printf " ${CY}[2]${N}  ${WH}INFORMATION VPS${N}         ${CY}[5]${N}  ${WH}JALANKAN BOT${N}\n"
-    printf " ${CY}[3]${N}  ${WH}BACKUP / RESTORE${N}        ${CY}[6]${N}  ${WH}EXIT${N}\n"
-    printf "${WH}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
-    echo -ne "${PU2}✦${N} ${CY}Select${N} ${WH}[1-6]${N} ${PU2}›${N} "
+    local INNER=40
+    echo ""
+    printf "${WH}╭%*s╮${N}\n" "$INNER" '' | sed 's/ /─/g'
+    center_text "✦ MAIN MENU" 42
+    printf "${WH}│${N} ${WH}├─ [1] DAFTAR USER       [4] CEK SERVICE${N}%*s${WH}│${N}\n" 1 ''
+    printf "${WH}│${N} ${WH}├─ [2] INFORMATION VPS   [5] JALANKAN BOT${N}%*s${WH}│${N}\n" 1 ''
+    printf "${WH}│${N} ${WH}└─ [3] BACKUP / RESTORE  [6] EXIT${N}%*s${WH}│${N}\n" 7 ''
+    printf "${WH}╰%*s╯${N}\n" "$INNER" '' | sed 's/ /─/g'
+    printf "${WH}╭%*s╮${N}\n" "$INNER" '' | sed 's/ /─/g'
+    printf "${WH}│${N} ${WH}✦ Select [1-6] ›${N}%*s${WH}│${N}\n" 19 ''
+    center_text "❖  powered by ©sansxml  ❖" 42
+    printf "${WH}╰%*s╯${N}\n" "$INNER" '' | sed 's/ /─/g'
+    echo -ne "${WH}Select:${N} "
+    read choice
+    case "$choice" in
+        1|01) show_user_list ;;
+        2|02) show_vps_info ;;
+        3|03) backup_menu ;;
+        4|04) show_services ;;
+        5|05) run_bot ;;
+        6|06) clear; exit 0 ;;
+        *) echo -e "\n  ${RE}Pilihan tidak valid${N}"; sleep 1 ;;
+    esac
 }
 show_vps_info(){ clear; show_banner; box_top "VPS INFORMATION"
     kv "OS" "$(grep PRETTY_NAME /etc/os-release|cut -d= -f2|tr -d '"')"
@@ -3079,16 +3129,6 @@ PYUSERS
 }
 while true; do
     show_menu
-    read choice
-    case "$choice" in
-        1|01) show_user_list ;;
-        2|02) show_vps_info ;;
-        3|03) backup_menu ;;
-        4|04) show_services ;;
-        5|05) run_bot ;;
-        6|06) clear; exit 0 ;;
-        *) echo ""; echo -e "  ${RE}Pilihan tidak valid${N}"; sleep 1 ;;
-    esac
 done
 MENUEOF
 
