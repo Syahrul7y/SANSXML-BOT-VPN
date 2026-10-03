@@ -41,9 +41,12 @@ case "$(uname -m)" in x86_64|amd64|aarch64|arm64) ;; *) echo -e "  ${RED}ARSITEK
 echo -e "  ${CYAN}OS${NC}       : ${PRETTY_NAME:-$ID}"
 echo -e "  ${CYAN}VERSION${NC}  : ${VERSION_ID:-unknown}"
 echo -e "  ${CYAN}ARCH${NC}     : $(uname -m)"
+
+# Main domain used by the VPN and DNSTT/SlowDNS service.
+DOMAIN="id-sansvpnstore.cloud"
 # Track packages that were not installed before SANSXML, so EXIT can remove only what this installer added.
 SC_PKG_FILE=/etc/sansxml-packages.list
-SC_PKGS="python3 python3-pip python3-venv sshpass curl wget unzip stunnel4 dropbear haproxy nginx net-tools cron ufw iptables openssl cmake build-essential git pkg-config bc procps dnsutils vnstat uuid-runtime socat certbot"
+SC_PKGS="python3 python3-pip python3-venv golang-go sshpass curl wget unzip stunnel4 dropbear haproxy nginx net-tools cron ufw iptables openssl cmake build-essential git pkg-config bc procps dnsutils vnstat uuid-runtime socat certbot ca-certificates"
 : > "$SC_PKG_FILE"
 for _p in $SC_PKGS; do
   dpkg-query -W -f='${Status}' "$_p" 2>/dev/null | grep -q 'install ok installed' || echo "$_p" >> "$SC_PKG_FILE"
@@ -56,7 +59,7 @@ _pkg_install(){
   echo "== apt-get update ==" > /tmp/sansxml-apt-install.log
   if ! apt-get update -y >> /tmp/sansxml-apt-install.log 2>&1; then return 1; fi
   echo "== apt-get install ==" >> /tmp/sansxml-apt-install.log
-  apt-get install -y --no-install-recommends python3 python3-pip python3-venv sshpass curl wget unzip stunnel4 dropbear haproxy nginx net-tools cron ufw iptables openssl cmake build-essential git pkg-config bc procps dnsutils vnstat uuid-runtime socat >> /tmp/sansxml-apt-install.log 2>&1
+  apt-get install -y --no-install-recommends python3 python3-pip python3-venv golang-go sshpass curl wget unzip stunnel4 dropbear haproxy nginx net-tools cron ufw iptables openssl cmake build-essential git pkg-config bc procps dnsutils vnstat uuid-runtime socat ca-certificates >> /tmp/sansxml-apt-install.log 2>&1
 }
 _pkg_install & _pkg_pid=$!
 spin $_pkg_pid "Install packages" || {
@@ -251,19 +254,128 @@ EOF
   systemctl restart udpgw
 ) & spin $! "Install UDPGW"
 
+# 3b. SLOWDNS / DNSTT
+# Real DNSTT server: persistent 64-hex key, UDP/5300 listener and UDP/53 -> 5300 redirect.
+# The DNS zone still needs to be delegated at the domain provider (see /etc/dnstt/config).
+(
+  set -e
+  DNSTT_DIR=/etc/dnstt
+  DNSTT_BIN=/usr/local/bin/dnstt-server
+  DNSTT_PORT=5300
+  DNSTT_TUNNEL_DOMAIN="slow.${DOMAIN}"
+  DNSTT_NS_HOST="ns.${DOMAIN}"
+  mkdir -p "$DNSTT_DIR"
+  chmod 700 "$DNSTT_DIR"
+
+  # Build the official DNSTT server source. This avoids relying on an unofficial binary URL.
+  if ! command -v go >/dev/null 2>&1; then
+    echo "Go compiler tidak tersedia" >&2
+    exit 1
+  fi
+  if [ ! -x "$DNSTT_BIN" ] || ! "$DNSTT_BIN" -h >/dev/null 2>&1; then
+    rm -rf /tmp/dnstt-src
+    git clone --depth=1 https://www.bamsoftware.com/git/dnstt.git /tmp/dnstt-src >/tmp/sansxml-dnstt-build.log 2>&1
+    cd /tmp/dnstt-src/dnstt-server
+    go build -trimpath -o "$DNSTT_BIN" . >>/tmp/sansxml-dnstt-build.log 2>&1
+    chmod 0755 "$DNSTT_BIN"
+    rm -rf /tmp/dnstt-src
+  fi
+
+  # Stable keypair: never regenerate it during a normal reinstall/restart.
+  if [ ! -s "$DNSTT_DIR/server.key" ] || [ ! -s "$DNSTT_DIR/server.pub" ]; then
+    rm -f "$DNSTT_DIR/server.key" "$DNSTT_DIR/server.pub"
+    "$DNSTT_BIN" -gen-key \
+      -privkey-file "$DNSTT_DIR/server.key" \
+      -pubkey-file "$DNSTT_DIR/server.pub" >/tmp/sansxml-dnstt-keygen.log 2>&1
+  fi
+  chmod 600 "$DNSTT_DIR/server.key"
+  chmod 644 "$DNSTT_DIR/server.pub"
+
+  DNSTT_PUBKEY="$(tr -d '[:space:]' < "$DNSTT_DIR/server.pub")"
+  if ! printf '%s' "$DNSTT_PUBKEY" | grep -Eq '^[0-9a-fA-F]{64}$'; then
+    echo "DNSTT public key bukan 64 karakter hexadecimal" >&2
+    exit 1
+  fi
+  DNSTT_PUBKEY="$(printf '%s' "$DNSTT_PUBKEY" | tr '[:upper:]' '[:lower:]')"
+  printf '%s\n' "$DNSTT_PUBKEY" > "$DNSTT_DIR/server.pub"
+
+  if ! id dnstt >/dev/null 2>&1; then
+    useradd --system --no-create-home --shell /usr/sbin/nologin dnstt
+  fi
+  chown dnstt:dnstt "$DNSTT_DIR" "$DNSTT_DIR/server.key" "$DNSTT_DIR/server.pub"
+
+  # Forward the actual tunnel to SSH. DNSTT authenticates/encrypts the tunnel with server.key.
+  cat > /etc/systemd/system/dnstt-server.service << EOF
+[Unit]
+Description=SANSXML SlowDNS (DNSTT) Server
+After=network-online.target ssh.service
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=dnstt
+Group=dnstt
+ExecStart=$DNSTT_BIN -udp :$DNSTT_PORT -privkey-file $DNSTT_DIR/server.key $DNSTT_TUNNEL_DOMAIN 127.0.0.1:22
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=full
+ProtectHome=true
+LimitNOFILE=65535
+
+[Install]
+WantedBy=multi-user.target
+EOF
+
+  # Machine-readable values consumed by bot.py.
+  cat > "$DNSTT_DIR/config" << EOF
+SLOW_PORT=$DNSTT_PORT
+SLOW_TUNNEL_DOMAIN=$DNSTT_TUNNEL_DOMAIN
+SLOW_NS_HOST=$DNSTT_NS_HOST
+SLOW_DNS_AUTH_NS=$DNSTT_NS_HOST
+SLOW_PUBKEY=$DNSTT_PUBKEY
+EOF
+  # DNS delegation instructions. The installer cannot change registrar DNS without its API credentials.
+  PUBLIC_IP="$(curl -4fsS --max-time 8 https://api.ipify.org 2>/dev/null || true)"
+  cat > "$DNSTT_DIR/dns-records.txt" << EOF
+# SANSXML SlowDNS / DNSTT
+# VPS IPv4: ${PUBLIC_IP:-UNKNOWN}
+# Add these records at your DNS provider:
+# A   ${DNSTT_NS_HOST}   ${PUBLIC_IP:-YOUR_VPS_IP}
+# NS  ${DNSTT_TUNNEL_DOMAIN}   ${DNSTT_NS_HOST}
+#
+# Internal service: UDP ${DNSTT_PORT}
+# Public direct-DNS service: UDP 53 -> UDP ${DNSTT_PORT}
+# Public key: ${DNSTT_PUBKEY}
+EOF
+  chmod 600 "$DNSTT_DIR/config"
+  chmod 644 "$DNSTT_DIR/dns-records.txt"
+  chmod 600 "$DNSTT_DIR/config"
+  chown dnstt:dnstt "$DNSTT_DIR/config"
+
+  systemctl daemon-reload
+  systemctl enable dnstt-server >/dev/null 2>&1
+  systemctl restart dnstt-server
+  sleep 1
+  systemctl is-active --quiet dnstt-server
+  ss -lun | grep -Eq '(^|:)5300[[:space:]]' || { echo "DNSTT tidak listen di UDP/5300" >&2; exit 1; }
+) & spin $! "Install SlowDNS / DNSTT"
+
 ( ufw default allow incoming >/dev/null 2>&1
   ufw default allow outgoing >/dev/null 2>&1
+  # DNS tunnel clients normally reach UDP/53; DNSTT itself listens on 5300.
+  iptables -t nat -C PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 5300 2>/dev/null || iptables -t nat -I PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 5300
+  iptables -C INPUT -p udp --dport 5300 -j ACCEPT 2>/dev/null || iptables -I INPUT -p udp --dport 5300 -j ACCEPT
   for p in 22 80 443 8080 8443 8444 8445 10001 10002 10003 10004 10005 10006 10007; do ufw allow $p/tcp >/dev/null 2>&1; done
-  ufw allow 7300/udp >/dev/null 2>&1; ufw allow 1:65535/udp >/dev/null 2>&1
+  ufw allow 53/udp >/dev/null 2>&1; ufw allow 5300/udp >/dev/null 2>&1; ufw allow 7300/udp >/dev/null 2>&1; ufw allow 1:65535/udp >/dev/null 2>&1
   ufw --force enable >/dev/null 2>&1 ) & spin $! "Configure firewall"
 
 ( systemctl daemon-reload
-  systemctl enable ws-ssh ws-ssh-alt stunnel4 dropbear nginx haproxy >/dev/null 2>&1
-  systemctl restart ws-ssh ws-ssh-alt stunnel4 dropbear nginx haproxy
+  systemctl enable ws-ssh ws-ssh-alt stunnel4 dropbear nginx haproxy dnstt-server >/dev/null 2>&1
+  systemctl restart ws-ssh ws-ssh-alt stunnel4 dropbear nginx haproxy dnstt-server
   [ -f /usr/bin/badvpn-udpgw ] && systemctl enable udpgw >/dev/null 2>&1 && systemctl restart udpgw
   sleep 2 ) & spin $! "Start VPN services"
-
-DOMAIN="id-sansvpnstore.cloud"
 
 # 4. VPN CORE
 echo ""
@@ -391,6 +503,21 @@ TCPKeepAlive yes
 SSHEOF
 systemctl restart ssh 2>/dev/null || systemctl restart sshd
 
+# Read the real DNSTT values after installation so the bot config is not a placeholder.
+DNSTT_PUBKEY="$(tr -d '[:space:]' < /etc/dnstt/server.pub 2>/dev/null || true)"
+DNSTT_SLOW_HOST="$(awk -F= '/^SLOW_NS_HOST=/{print $2}' /etc/dnstt/config 2>/dev/null | tail -n1)"
+[ -n "$DNSTT_SLOW_HOST" ] || DNSTT_SLOW_HOST="slow.${DOMAIN}"
+if ! printf '%s' "$DNSTT_PUBKEY" | grep -Eq '^[0-9a-fA-F]{64}$'; then
+  echo -e "  ${RED}SLOWDNS ERROR${NC}: Public key DNSTT tidak valid."
+  exit 1
+fi
+DNSTT_SLOW_PORT="$(awk -F= '/^SLOW_PORT=/{print $2}' /etc/dnstt/config 2>/dev/null | tail -n1)"
+DNSTT_TUNNEL_DOMAIN="$(awk -F= '/^SLOW_TUNNEL_DOMAIN=/{print $2}' /etc/dnstt/config 2>/dev/null | tail -n1)"
+DNSTT_NS_HOST="$(awk -F= '/^SLOW_NS_HOST=/{print $2}' /etc/dnstt/config 2>/dev/null | tail -n1)"
+[ -n "$DNSTT_SLOW_PORT" ] || DNSTT_SLOW_PORT=5300
+[ -n "$DNSTT_TUNNEL_DOMAIN" ] || DNSTT_TUNNEL_DOMAIN="slow.${DOMAIN}"
+[ -n "$DNSTT_NS_HOST" ] || DNSTT_NS_HOST="ns.${DOMAIN}"
+
 # 6. BOT CONFIG
 # Token Telegram sengaja dikosongkan saat instalasi.
 # Token hanya diisi melalui menu [05] ADD TOKEN BOT.
@@ -416,10 +543,10 @@ cat > /root/vpnbot_config.json << CFGEOF
   "domain": "${DOMAIN}",
   "owner_ids": [${ADMIN_ID}],
   "servers": {
-    "id_rmhweb_01": {"name": "🇮🇩 ID-RMHWEB-01", "city": "", "isp": "", "ssh_ovpn": "ID-RMHWEB-01", "domain": "${DOMAIN}", "price_day": 117, "price_month": 3510, "ip_limit": 1, "slot_max": 100, "quota_gb": 700},
-    "id_rmhweb_02": {"name": "🇮🇩 ID-RMHWEB-02", "city": "", "isp": "", "ssh_ovpn": "ID-RMHWEB-02", "domain": "${DOMAIN}", "price_day": 167, "price_month": 5010, "ip_limit": 2, "slot_max": 100, "quota_gb": 800},
-    "id_rmhweb_03": {"name": "🇮🇩 ID-RMHWEB-03", "city": "", "isp": "", "ssh_ovpn": "ID-RMHWEB-03", "domain": "${DOMAIN}", "price_day": 167, "price_month": 5010, "ip_limit": 1, "slot_max": 100, "quota_gb": 800},
-    "id_rmhweb_04": {"name": "🇮🇩 ID-RMHWEB-04", "city": "", "isp": "", "ssh_ovpn": "ID-RMHWEB-04", "domain": "${DOMAIN}", "price_day": 167, "price_month": 5010, "ip_limit": 2, "slot_max": 100, "quota_gb": 800}
+    "id_rmhweb_01": {"name": "🇮🇩 ID-RMHWEB-01", "city": "", "isp": "", "ssh_ovpn": "ID-RMHWEB-01", "domain": "${DOMAIN}", "price_day": 117, "price_month": 3510, "ip_limit": 1, "slot_max": 100, "quota_gb": 700, "slow_dns": "${DNSTT_SLOW_HOST}", "slow_port": ${DNSTT_SLOW_PORT}, "slow_ns": "${DNSTT_SLOW_HOST}", "slow_pubkey": "${DNSTT_PUBKEY}"},
+    "id_rmhweb_02": {"name": "🇮🇩 ID-RMHWEB-02", "city": "", "isp": "", "ssh_ovpn": "ID-RMHWEB-02", "domain": "${DOMAIN}", "price_day": 167, "price_month": 5010, "ip_limit": 2, "slot_max": 100, "quota_gb": 800, "slow_dns": "", "slow_port": 5300, "slow_ns": "", "slow_pubkey": ""},
+    "id_rmhweb_03": {"name": "🇮🇩 ID-RMHWEB-03", "city": "", "isp": "", "ssh_ovpn": "ID-RMHWEB-03", "domain": "${DOMAIN}", "price_day": 167, "price_month": 5010, "ip_limit": 1, "slot_max": 100, "quota_gb": 800, "slow_dns": "", "slow_port": 5300, "slow_ns": "", "slow_pubkey": ""},
+    "id_rmhweb_04": {"name": "🇮🇩 ID-RMHWEB-04", "city": "", "isp": "", "ssh_ovpn": "ID-RMHWEB-04", "domain": "${DOMAIN}", "price_day": 167, "price_month": 5010, "ip_limit": 2, "slot_max": 100, "quota_gb": 800, "slow_dns": "", "slow_port": 5300, "slow_ns": "", "slow_pubkey": ""}
   },
   "ip_limit": 2,
   "block_hours": 2
@@ -1163,6 +1290,23 @@ def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="id_
     quota = srv.get("quota_gb", 700) or 700
     payload_ws = "GET /cdn-cgi/trace HTTP/1.1[crlf]Host: [host][crlf][crlf]GET-RAY / HTTP/1.1[crlf]Host: [host][crlf]Connection: Upgrade[crlf]User-Agent: [ua][crlf]Upgrade: websocket[crlf][crlf]"
     payload_tls = "GET / HTTP/1.1[crlf]Host: [host][crlf]User-Agent: [ua][crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf][crlf]"
+    slow_port = int(srv.get("slow_port", 5300) or 5300)
+    slow_ns = str(srv.get("slow_ns") or "").strip()
+    slow_pubkey = str(srv.get("slow_pubkey") or "").strip()
+    # Always prefer the real local DNSTT configuration when this is the local server.
+    if server_key == "id_rmhweb_01":
+        try:
+            dcfg = "/etc/dnstt/config"
+            if os.path.exists(dcfg):
+                vals = {}
+                for _line in open(dcfg, encoding="utf-8", errors="ignore"):
+                    if "=" in _line:
+                        _k,_v = _line.rstrip("\n").split("=",1); vals[_k] = _v.strip()
+                slow_port = int(vals.get("SLOW_PORT", slow_port) or slow_port)
+                slow_ns = vals.get("SLOW_NS_HOST", slow_ns) or slow_ns
+                slow_pubkey = vals.get("SLOW_PUBKEY", slow_pubkey) or slow_pubkey
+        except: pass
+    slow_line = f"{slow_ns}:{slow_port}@{u}:{p}" if slow_ns and slow_pubkey and slow_port else "-"
     esc = lambda x: str(x).replace("&","&amp;").replace("<","&lt;").replace(">","&gt;")
     L = [
         f"┌────────────────────────",
@@ -1186,11 +1330,15 @@ def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="id_
         f"│ <b>SSH UDP</b>    : 1-65535",
         f"│ <b>OVPN</b>       : 443, 1194, 2200",
         f"│ <b>BadVPN</b>     : 7100, 7300",
+        f"│ <b>Slow Dns</b>   : {esc(str(slow_port))}",
+        f"│ <b>Nama server</b> : {esc(slow_ns or '-')}",
+        f"│ <b>Pub key</b>    : {esc(slow_pubkey or '-')}",
         f"└────────────────────────", "",
         "──────────────────────────",
         f"🔐 <b>SSH WS</b>  : {esc(host)}:80@{esc(u)}:{esc(p)}",
         f"🔐 <b>SSH TLS</b> : {esc(host)}:443@{esc(u)}:{esc(p)}",
-        f"🔐 <b>SSH UDP</b> : {esc(host)}:1-65535@{esc(u)}:{esc(p)}", "",
+        f"🔐 <b>SSH UDP</b> : {esc(host)}:1-65535@{esc(u)}:{esc(p)}",
+        f"🔐 <b>SSH SLOW</b> : {esc(slow_line)}", "",
         f"🧩 <b>PAYLOAD WS</b> : {esc(payload_ws)}", "",
         f"🧩 <b>PAYLOAD TLS</b> : {esc(payload_tls)}", "",
         f"┌────────────────────────",
@@ -1644,7 +1792,7 @@ async def cb(u,c):
 
     if d == "admin|srv":
         if not is_owner(uid): return
-        lines = ["<blockquote>","💻 <b>KELOLA SERVER</b>","───────────────────────",""]
+        lines = ["<blockquote>","🌐 <b>DAFTAR SERVER</b>","───────────────────────",""]
         for k,s in SERVERS.items():
             tag = " ⚠️" if not is_server_complete(s) else ""
             lines.append(f"<b>{s.get('name','-')}{tag}</b>")
@@ -1681,16 +1829,22 @@ async def cb(u,c):
         pms = rupiah(pm) if pm else "❌"; ips = f"{ip} IP" if ip else "❌"
         sms = f"{sm}" if sm else "❌"; doms = dom if dom else "❌"
         cty = s.get("city","") or ""; isp_v = s.get("isp","") or ""
+        slow_dns_v = s.get("slow_dns","") or ""
+        slow_port_v = s.get("slow_port",5300) or 5300
+        slow_ns_v = s.get("slow_ns","") or ""
+        slow_pub_v = s.get("slow_pubkey","") or ""
         warn = "\n⚠️ <b>Lengkapi dulu</b>\n" if not comp else "\n✅ <i>Aktif</i>\n"
         txt = (f"<blockquote><b>{s.get('name','-')}</b>\n───────────────────────\n\n"
             f"├ City          : <b>{cty}</b>\n├ ISP           : <b>{isp_v}</b>\n"
             f"├ Harga Harian  : <b>{pds}</b>\n├ Harga Bulanan : <b>{pms}</b>\n"
             f"├ Qouta         : <b>{qgs}</b>\n├ Limit IP      : <b>{ips}</b>\n"
-            f"├ Slot Server   : <b>{sms}</b>\n╰ Domain       : <b>{doms}</b>\n{warn}</blockquote>")
+            f"├ Slot Server   : <b>{sms}</b>\n├ Slow DNS      : <b>{slow_dns_v + ':' + str(slow_port_v) if slow_dns_v else '❌'}</b>\n├ Nama Server   : <b>{slow_ns_v or '❌'}</b>\n├ Pub Key       : <b>{slow_pub_v or '❌'}</b>\n╰ Domain       : <b>{doms}</b>\n{warn}</blockquote>")
         rows = [[B("Nama Server",f"srv_set|{k}|name",style="primary"),B("Harga Bulanan",f"srv_set|{k}|price_month",style="primary")],
             [B("Kota / City",f"srv_set|{k}|city",style="primary"),B("ISP",f"srv_set|{k}|isp",style="primary")],
             [B("Quota GB",f"srv_set|{k}|quota_gb",style="primary"),B("Limit IP",f"srv_set|{k}|ip_limit",style="primary")],
-            [B("Slot Server",f"srv_set|{k}|slot_max",style="primary"),B("Domain Server",f"srv_set|{k}|domain",style="primary")]]
+            [B("Slot Server",f"srv_set|{k}|slot_max",style="primary"),B("Domain Server",f"srv_set|{k}|domain",style="primary")],
+            [B("Slow DNS",f"srv_set|{k}|slow_dns",style="primary"),B("Port SlowDNS",f"srv_set|{k}|slow_port",style="primary")],
+            [B("Nama Server SlowDNS",f"srv_set|{k}|slow_ns",style="primary"),B("Pub Key SlowDNS",f"srv_set|{k}|slow_pubkey",style="primary")]]
         if not is_local_server(k):
             rows.append([B("🔧 SSH Setting",f"srv_ssh|{k}",style="primary")])
         rows.append([B("🗑️ Hapus",f"srv_del|{k}",style="danger")])
@@ -1712,8 +1866,12 @@ async def cb(u,c):
               "price_month":f"Kirim harga BULANAN (30 hari) baru untuk <b>{sname}</b>\nContoh: <code>3510</code>\n<i>Harga harian otomatis = harga bulanan ÷ 30</i>",
               "quota_gb":f"Kirim quota GB baru untuk <b>{sname}</b>\nContoh: <code>700</code>",
               "ip_limit":f"Kirim limit IP baru untuk <b>{sname}</b>\nContoh: <code>2</code>",
-              "slot_max":f"Kirim jumlah slot server baru untuk <b>{sname}</b>\nContoh: <code>50</code>",
-              "domain":f"Kirim DOMAIN baru untuk <b>{sname}</b>\nContoh: <code>id-sansvpnstore.cloud</code>"}
+              "slot_max":f"Kirim jumlah slot server baru untuk <b>{sname}</b>\nContoh: <code>100</code>",
+              "domain":f"Kirim DOMAIN baru untuk <b>{sname}</b>\nContoh: <code>id-sansvpnstore.cloud</code>",
+              "slow_dns":f"Kirim host SlowDNS untuk <b>{sname}</b>\nContoh: <code>ns-id3.example.com</code>",
+              "slow_port":f"Kirim port SlowDNS untuk <b>{sname}</b>\nContoh: <code>5300</code>",
+              "slow_ns":f"Kirim Nama Server / NS SlowDNS untuk <b>{sname}</b>\nContoh: <code>ns-id3.example.com</code>",
+              "slow_pubkey":f"Kirim Pub Key SlowDNS untuk <b>{sname}</b>\nContoh: <code>64 karakter hexadecimal</code>"}
         try: await q.edit_message_text(pr.get(f,"Kirim:"),reply_markup=InlineKeyboardMarkup([[B("❌ Batal",f"srv_edit|{k}",style="danger")]]),parse_mode="HTML")
         except: pass
         return
@@ -1730,8 +1888,22 @@ async def cb(u,c):
         return
     if d == "srv_add_local":
         if not is_owner(uid): return
-        if any(is_local_server(k) for k in SERVERS):
-            await q.answer("⚠️ Server lokal sudah ada",show_alert=True); return
+        # Jika server lokal sudah ada, langsung buka SET SERVER.
+        # Jangan hanya mengirim q.answer kedua karena callback sudah di-answer di awal cb().
+        existing = next((kk for kk in SERVERS if is_local_server(kk)), None)
+        if existing:
+            try:
+                await q.edit_message_text(
+                    "<blockquote>ℹ️ <b>SERVER LOKAL SUDAH ADA</b>\n\n"
+                    "Server lokal sudah ditambahkan.\n"
+                    "Sekarang tinggal atur konfigurasinya.</blockquote>",
+                    reply_markup=InlineKeyboardMarkup([
+                        [B("⚙️ SET SERVER",f"srv_edit|{existing}",style="primary")],
+                        [B("🔙 Kembali","admin|srv",style="danger")]
+                    ]),parse_mode="HTML")
+            except Exception as e:
+                logger.error(f"srv_add_local existing: {e}")
+            return
         kn = "local_server"
         if kn in SERVERS:
             kn = f"local_{int(time.time())}"
@@ -1739,7 +1911,7 @@ async def cb(u,c):
         SERVERS[kn] = {"name":nama,"ssh_host":"127.0.0.1","ssh_port":22,"ssh_user":"root",
             "ssh_key":SSH_KEY_PATH,"city":"","isp":"","ssh_ovpn":nama,
             "domain":None,"price_day":None,"price_month":None,
-            "ip_limit":None,"slot_max":None,"quota_gb":None}
+            "ip_limit":None,"slot_max":None,"quota_gb":None,"slow_dns":"","slow_port":5300,"slow_ns":"","slow_pubkey":""}
         save_servers()
         try: await q.edit_message_text(
             f"<blockquote>✅ <b>{nama} ditambahkan</b>\n\n"
@@ -1824,7 +1996,7 @@ async def cb(u,c):
         SERVERS.pop(k,None); save_servers()
         try: await q.edit_message_text(
             f"<blockquote>✅ <b>Dihapus</b>\n\nServer: <b>{s.get('name','-')}</b>\nUser OS: <b>{dele}</b>\nAkun JSON: <b>{rem}</b>\n</blockquote>",
-            reply_markup=InlineKeyboardMarkup([[B("💻 Kelola Server","admin|srv",style="primary")],
+            reply_markup=InlineKeyboardMarkup([[B("🌐 Daftar Server","admin|srv",style="primary")],
                 [B("🔙 Menu","admin|menu",style="danger")]]),parse_mode="HTML")
         except: pass
         asyncio.create_task(sync_push_async()); return
@@ -1843,7 +2015,7 @@ async def cb(u,c):
             "ip_limit":None,"slot_max":None,"quota_gb":None}
         save_servers(); c.user_data["srv_add_pending"] = None
         try: await q.edit_message_text(f"<blockquote>✅ <b>{pend['nama']} ditambahkan</b>\n\n⚠️ Lengkapi data dulu</blockquote>",
-            reply_markup=InlineKeyboardMarkup([[B("💻 Kelola Server","admin|srv",style="primary")],
+            reply_markup=InlineKeyboardMarkup([[B("🌐 Daftar Server","admin|srv",style="primary")],
                 [B("🔙 Menu","admin|menu",style="danger")]]),parse_mode="HTML")
         except: pass
         asyncio.create_task(sync_push_async()); return
@@ -1872,7 +2044,7 @@ async def cb(u,c):
             bw = s["bw"]; bws = f"{bw:.0f}" if bw >= 1 else f"{bw:.1f}"
             svr_parts.append(f"├ {s['name']}{tag}\n│ ├ Qouta  : <b>{bws}/{s['quota']}</b>\n│ ├ Slot   : <b>{s['used']}/{s['max']}</b>\n│ ╰ Status : <b>{s['status']}</b>")
         svr_txt = "\n".join(svr_parts)
-        txt = ("<blockquote>💻 <b>PENGATURAN VPS BOT VPN</b>\n───────────────────────\n"
+        txt = ("<blockquote>⚙️ <b>PENGATURAN</b>\n───────────────────────\n"
             f"👥 Total User : <b>{us['total']}</b>\n   Total Akun : <b>{count_accounts()}</b>\n\n"
             "📈 <b>PENGHASILAN</b>\n"
             f"├ Hari Ini   : <b>{rupiah(inc['hari'])}</b>\n├ Minggu Ini : <b>{rupiah(inc['minggu'])}</b>\n"
@@ -2260,6 +2432,18 @@ async def msg(u,c):
                 s["slot_max"] = a; out = f"Slot → <b>{a}</b>"
             elif f == "domain":
                 s["domain"] = val; out = f"Domain → <b>{val}</b>"
+            elif f == "slow_dns":
+                s["slow_dns"] = val; out = f"Slow DNS → <b>{val}</b>"
+            elif f == "slow_port":
+                a = int(re.sub(r'[^0-9]','',val))
+                if a <= 0 or a > 65535: await u.message.reply_text("❌ Port tidak valid",parse_mode="HTML"); return
+                s["slow_port"] = a; out = f"Port SlowDNS → <b>{a}</b>"
+            elif f == "slow_ns":
+                s["slow_ns"] = val; out = f"Nama Server → <b>{val}</b>"
+            elif f == "slow_pubkey":
+                if val and not re.fullmatch(r'[0-9a-fA-F]{64}', val):
+                    await u.message.reply_text("❌ Pub Key harus 64 karakter hexadecimal",parse_mode="HTML"); return
+                s["slow_pubkey"] = val.lower(); out = f"Pub Key → <b>{val.lower()}</b>"
             else:
                 c.user_data["srv_edit"] = None
                 await u.message.reply_text("❌ Invalid",parse_mode="HTML"); return
@@ -2777,11 +2961,14 @@ for username, account in d.items():
 PYUSERS
     fi
 
-    rm -f /etc/systemd/system/ws-ssh.service /etc/systemd/system/ws-ssh-alt.service
+    rm -f /etc/systemd/system/ws-ssh.service /etc/systemd/system/ws-ssh-alt.service /etc/systemd/system/dnstt-server.service
+    iptables -t nat -D PREROUTING -p udp --dport 53 -j REDIRECT --to-ports 5300 2>/dev/null || true
+    iptables -D INPUT -p udp --dport 5300 -j ACCEPT 2>/dev/null || true
+    userdel dnstt 2>/dev/null || true
     rm -f /etc/systemd/system/udpgw.service /etc/systemd/system/xray.service
-    rm -f /usr/local/bin/ws-ssh.py /usr/bin/badvpn-udpgw /usr/local/bin/xray /usr/bin/xray
+    rm -f /usr/local/bin/ws-ssh.py /usr/bin/badvpn-udpgw /usr/local/bin/dnstt-server /usr/local/bin/xray /usr/bin/xray
 
-    rm -rf /etc/xray /var/lib/xray /var/log/xray /etc/stunnel
+    rm -rf /etc/xray /var/lib/xray /etc/dnstt /var/log/xray /etc/stunnel
     rm -f /etc/nginx/sites-enabled/sansxml /etc/nginx/sites-available/sansxml
     rm -f /etc/ssh/sshd_config.d/99-vpnbot.conf
     rm -f /usr/local/bin/sansxml-menu /etc/profile.d/sansxml-menu.sh
