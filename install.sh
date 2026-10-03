@@ -4,25 +4,11 @@ CYAN='\033[1;36m'; GREEN='\033[1;32m'; RED='\033[1;31m'
 YELLOW='\033[1;33m'; MAGENTA='\033[1;35m'; WHITE='\033[1;37m'; BLUE='\033[1;34m'; NC='\033[0m'
 # Installer/menu palette: cyan + purple/blue + white + green status
 PU='\033[1;34m'; PU2='\033[1;36m'; PK='\033[1;35m'; GY='\033[1;36m'; WH='\033[1;37m'; GR='\033[1;32m'; RE='\033[1;31m'
-VERSION="2.4.0"
+VERSION="2.6.0"
 LOG_FILE="/var/log/sansxml.log"
 mkdir -p "$(dirname "$LOG_FILE")"
 : > "$LOG_FILE"
 exec >>"$LOG_FILE" 2>&1
-
-STATE_DIR=/tmp/sansxml-installer-state
-mkdir -p "$STATE_DIR"
-set_state(){ printf '%s' "$2" > "$STATE_DIR/$1"; }
-get_state(){ cat "$STATE_DIR/$1" 2>/dev/null || printf '%s' "$2"; }
-
-bar(){
-  local pct=${1:-0} width=58 filled=$((pct*width/100))
-  local empty=$((width-filled))
-  printf '\n'
-  printf '▰%.0s' $(seq 1 "$filled")
-  printf '▱%.0s' $(seq 1 "$empty")
-  printf '\n%-52s %s\n' "$pct%" "${2:-}" 
-}
 
 get_uptime_inst(){ local s=$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 0); printf "%dd %02dh %02dm" "$((s/86400))" "$(((s%86400)/3600))" "$(((s%3600)/60))"; }
 get_ram_pct(){ local t=$(awk '/MemTotal/{print $2}' /proc/meminfo); local a=$(awk '/MemAvailable/{print $2}' /proc/meminfo); awk -v t="$t" -v a="$a" 'BEGIN{if(t>0)printf "%d",((t-a)/t)*100;else print 0}'; }
@@ -46,30 +32,16 @@ get_server_meta(){
 }
 get_server_meta
 
-render_install(){ :; }
-
-finish_or_fail(){
-  local name=$1 rc=$2
-  if [ "$rc" -eq 0 ]; then set_state "$name" 'selesai'; else set_state "$name" 'gagal'; fi
-  return "$rc"
-}
-
 run_step(){
   local name=$1 label=$2; shift 2
-  set_state "$name" 'sedang berjalan'
   "$@" >>"$LOG_FILE" 2>&1
-  local rc=$?
-  finish_or_fail "$name" "$rc"
-  return "$rc"
+  return $?
 }
 
 run_step_sh(){
   local name=$1 label=$2; shift 2
-  set_state "$name" 'sedang berjalan'
   bash -c "$*" >>"$LOG_FILE" 2>&1
-  local rc=$?
-  finish_or_fail "$name" "$rc"
-  return "$rc"
+  return $?
 }
 
 spin(){
@@ -85,8 +57,6 @@ core_fail(){
 }
 
 INSTALL_START=$(date +%s)
-set_state pkg '◐ sedang berjalan'
-render_install
 
 # 1. DEPENDENCIES — Ubuntu / Debian only
 if [ "$(id -u)" != "0" ]; then
@@ -171,34 +141,45 @@ run_step_sh vnstat 'Mengaktifkan vnstat' 'systemctl enable vnstat >/dev/null 2>&
 run_step_sh netopt 'Optimasi TCP / BBR / Keepalive' 'set -e
 modprobe tcp_bbr 2>/dev/null || true
 cat > /etc/sysctl.d/99-sansxml-speed.conf << "SYSCTLEOF"
-# SANSXML Universal Network: gaming + live streaming + browsing + VPN
-# Prefer a paced queue and BBR; fall back safely when the kernel lacks BBR.
-net.core.default_qdisc=fq_codel
+# SANSXML Balanced Fast Network 2.6
+# General-purpose tuning: gaming + live streaming + browsing + SSH/VPN.
+# Keep queues and buffers moderate to avoid unnecessary latency/bufferbloat.
+net.core.default_qdisc=fq
 net.ipv4.tcp_congestion_control=cubic
 net.ipv4.tcp_fastopen=3
 net.ipv4.tcp_slow_start_after_idle=0
-net.ipv4.tcp_keepalive_time=60
-net.ipv4.tcp_keepalive_intvl=15
-net.ipv4.tcp_keepalive_probes=5
+net.ipv4.tcp_moderate_rcvbuf=1
 net.ipv4.tcp_mtu_probing=1
 net.ipv4.tcp_syncookies=1
 net.ipv4.tcp_fin_timeout=15
-net.core.somaxconn=65535
-net.ipv4.tcp_max_syn_backlog=65535
+net.ipv4.tcp_keepalive_time=60
+net.ipv4.tcp_keepalive_intvl=15
+net.ipv4.tcp_keepalive_probes=5
+net.ipv4.tcp_max_syn_backlog=32768
+net.core.somaxconn=32768
+net.core.netdev_max_backlog=65536
 net.ipv4.ip_local_port_range=1024 65535
-# Moderate socket buffers: enough for high-throughput streaming without huge queues.
-net.core.rmem_max=33554432
-net.core.wmem_max=33554432
-net.ipv4.tcp_rmem=4096 131072 33554432
-net.ipv4.tcp_wmem=4096 131072 33554432
+# Moderate socket buffers: enough for normal streaming without huge queues.
+net.core.rmem_max=16777216
+net.core.wmem_max=16777216
+net.core.rmem_default=262144
+net.core.wmem_default=262144
+net.ipv4.tcp_rmem=4096 131072 16777216
+net.ipv4.tcp_wmem=4096 131072 16777216
+# Moderate UDP buffers for game/voice traffic.
+net.ipv4.udp_rmem_min=8192
+net.ipv4.udp_wmem_min=8192
+net.core.optmem_max=65536
 SYSCTLEOF
 sysctl --system >/dev/null 2>&1
-# BBR is used when supported by this kernel; otherwise keep fq_codel + CUBIC.
+# BBR + fq when the running kernel supports it; otherwise CUBIC + fq_codel.
 if modprobe tcp_bbr 2>/dev/null && grep -qw bbr /proc/sys/net/ipv4/tcp_allowed_congestion_control 2>/dev/null; then
   sysctl -w net.ipv4.tcp_congestion_control=bbr >/dev/null 2>&1 || true
   sysctl -w net.core.default_qdisc=fq >/dev/null 2>&1 || true
+else
+  sysctl -w net.ipv4.tcp_congestion_control=cubic >/dev/null 2>&1 || true
+  sysctl -w net.core.default_qdisc=fq_codel >/dev/null 2>&1 || true
 fi
-# Disable GRO/GSO/TSO tuning only when explicitly supported; leave NIC defaults intact.
 mkdir -p /etc/ssh/sshd_config.d
 cat > /etc/ssh/sshd_config.d/98-sansxml-tcp.conf << "SSHTCPEOF"
 ClientAliveInterval 60
@@ -355,8 +336,6 @@ connect = 127.0.0.1:80
 cert = /etc/stunnel/stunnel.pem
 EOF
 sed -i "s/^ENABLED=.*/ENABLED=1/" /etc/default/stunnel4 2>/dev/null || echo "ENABLED=1" >> /etc/default/stunnel4' || exit 1
-
-set_state udpgw 'sedang berjalan'
 (
   systemctl stop udpgw 2>/dev/null || true
   rm -rf /tmp/badvpn
