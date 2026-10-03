@@ -1387,7 +1387,7 @@ def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="id_
         f"🔐 <b>SSH WS</b>  : {esc(host)}:80@{esc(u)}:{esc(p)}",
         f"🔐 <b>SSH TLS</b> : {esc(host)}:443@{esc(u)}:{esc(p)}",
         f"🔐 <b>SSH UDP</b> : {esc(host)}:1-65535@{esc(u)}:{esc(p)}",
-        f"🔐 <b>SSH SLOW</b> : {esc(slow_line)}", "",
+        f"🔐 <b>SSH SLOW DNS</b> : {esc(slow_line)}", "",
         f"🧩 <b>PAYLOAD WS</b> : {esc(payload_ws)}", "",
         f"🧩 <b>PAYLOAD TLS</b> : {esc(payload_tls)}", "",
         f"┌────────────────────────",
