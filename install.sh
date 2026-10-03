@@ -472,7 +472,13 @@ XRAYSVC
     exit 1
   fi
   systemctl is-enabled --quiet xray.service
-) >>"$LOG_FILE" 2>&1 & spin $! "Install Core VPN" || core_fail
+) >>"$LOG_FILE" 2>&1 &
+CORE_PID=$!
+wait "$CORE_PID"
+CORE_RC=$?
+if [ "$CORE_RC" -ne 0 ]; then
+  core_fail
+fi
 
 # Restore SSH/WS/SSL services after certificate setup
 run_step_sh services2 "Menjalankan layanan VPN" "systemctl daemon-reload; systemctl enable ws-ssh ws-ssh-alt stunnel4 >/dev/null 2>&1; systemctl restart ws-ssh ws-ssh-alt stunnel4" || exit 1
