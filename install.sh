@@ -1244,6 +1244,26 @@ def _local_server_meta():
 def _local_slowdns():
     vals = {}
     try:
+        # Automatic recovery for a fresh VPS: if DNSTT is installed but the
+        # keypair was never created, create it once. Never replace an existing
+        # private key because that would invalidate existing clients.
+        ddir = "/etc/dnstt"
+        dkey = os.path.join(ddir, "server.key")
+        dpub = os.path.join(ddir, "server.pub")
+        dbin = "/usr/local/bin/dnstt-server"
+        if (not os.path.exists(dkey) or os.path.getsize(dkey) == 0) and (not os.path.exists(dpub) or os.path.getsize(dpub) == 0) and os.path.exists(dbin):
+            try:
+                os.makedirs(ddir, exist_ok=True)
+                subprocess.run([dbin, "-gen-key", "-privkey-file", dkey, "-pubkey-file", dpub],
+                               stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL,
+                               timeout=15, check=False)
+                try: os.chmod(dkey, 0o600)
+                except: pass
+                try: os.chmod(dpub, 0o644)
+                except: pass
+            except Exception:
+                pass
+
         pth = "/etc/dnstt/config"
         if os.path.exists(pth):
             with open(pth, encoding="utf-8", errors="ignore") as fh:
@@ -1268,6 +1288,14 @@ def _local_slowdns():
                     if m:
                         vals["SLOW_PUBKEY"] = m.group(0).lower()
                         break
+        # Fallback to the metadata copy created by the installer.
+        if not vals.get("SLOW_PUBKEY"):
+            pubtxt = "/etc/dnstt/server.pub.txt"
+            if os.path.exists(pubtxt):
+                raw = open(pubtxt, encoding="utf-8", errors="ignore").read()
+                m = re.search(r"(?<![0-9a-fA-F])[0-9a-fA-F]{64}(?![0-9a-fA-F])", raw)
+                if m:
+                    vals["SLOW_PUBKEY"] = m.group(0).lower()
         # Accept either naming convention for the authoritative NS hostname.
         if not vals.get("SLOW_NS_HOST"):
             vals["SLOW_NS_HOST"] = vals.get("SLOW_DNS_AUTH_NS") or vals.get("NS_HOST") or ""
@@ -1316,6 +1344,15 @@ def acc_caption(u, p, exp, dl, ip, manual=False, is_trial=False, server_key="id_
         base_domain = str(srv.get("domain") or SSH_HOST).strip()
         if base_domain:
             slow_ns = "ns." + base_domain
+    # Last live read immediately before rendering the account. This avoids a
+    # stale value when DNSTT finished starting after the bot process started.
+    if is_local_server(server_key):
+        _sd2 = _local_slowdns()
+        if _sd2.get("SLOW_PORT"):
+            try: slow_port = int(_sd2.get("SLOW_PORT"))
+            except: pass
+        slow_ns = _sd2.get("SLOW_NS_HOST", slow_ns) or slow_ns
+        slow_pubkey = _sd2.get("SLOW_PUBKEY", slow_pubkey) or slow_pubkey
     slow_line = f"{slow_ns}:{slow_port}@{u}:{p}" if slow_ns and re.fullmatch(r"[0-9a-fA-F]{64}", slow_pubkey) else "-"
     payload_ws = "GET /cdn-cgi/trace HTTP/1.1[crlf]Host: [host][crlf][crlf]GET-RAY / HTTP/1.1[crlf]Host: [host][crlf]Connection: Upgrade[crlf]User-Agent: [ua][crlf]Upgrade: websocket[crlf][crlf]"
     payload_tls = "GET / HTTP/1.1[crlf]Host: [host][crlf]User-Agent: [ua][crlf]Upgrade: websocket[crlf]Connection: Upgrade[crlf][crlf]"
