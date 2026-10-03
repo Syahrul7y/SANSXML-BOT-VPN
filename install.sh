@@ -2,7 +2,9 @@
 export DEBIAN_FRONTEND=noninteractive
 CYAN='\033[1;36m'; GREEN='\033[1;32m'; RED='\033[1;31m'
 YELLOW='\033[1;33m'; MAGENTA='\033[1;35m'; WHITE='\033[1;37m'; BLUE='\033[1;34m'; NC='\033[0m'
-VERSION="2.2.0"
+# Installer/menu palette: cyan + purple/blue + white + green status
+PU='\033[1;34m'; PU2='\033[1;36m'; PK='\033[1;35m'; GY='\033[1;36m'; WH='\033[1;37m'; GR='\033[1;32m'; RE='\033[1;31m'
+VERSION="2.3.0"
 LOG_FILE="/var/log/sansxml.log"
 mkdir -p "$(dirname "$LOG_FILE")"
 : > "$LOG_FILE"
@@ -22,30 +24,74 @@ bar(){
   printf '\n%-52s %s\n' "$pct%" "${2:-}" 
 }
 
+get_uptime_inst(){ local s=$(awk '{print int($1)}' /proc/uptime 2>/dev/null || echo 0); printf "%dd %02dh %02dm" "$((s/86400))" "$(((s%86400)/3600))" "$(((s%3600)/60))"; }
+get_ram_pct(){ local t=$(awk '/MemTotal/{print $2}' /proc/meminfo); local a=$(awk '/MemAvailable/{print $2}' /proc/meminfo); awk -v t="$t" -v a="$a" 'BEGIN{if(t>0)printf "%d",((t-a)/t)*100;else print 0}'; }
+get_disk_pct(){ df -P / 2>/dev/null | awk 'NR==2{gsub("%","",$5); print $5+0}'; }
+get_public_ip(){
+  hostname -I 2>/dev/null | awk '{print $1}'
+}
+get_server_meta(){
+  SERVER_CITY="-"; SERVER_ISP="-"; SERVER_REGION="-"; SERVER_COUNTRY="Indonesia"; SERVER_TZ="Asia/Jakarta"
+  if command -v curl >/dev/null 2>&1; then
+    local j
+    j=$(curl -4 -fsS --max-time 3 https://ipinfo.io/json 2>/dev/null || true)
+    if [ -n "$j" ]; then
+      SERVER_CITY=$(printf '%s' "$j" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("city") or "-")' 2>/dev/null || echo "-")
+      SERVER_REGION=$(printf '%s' "$j" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("region") or "-")' 2>/dev/null || echo "-")
+      SERVER_ISP=$(printf '%s' "$j" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("org") or "-")' 2>/dev/null || echo "-")
+      SERVER_COUNTRY=$(printf '%s' "$j" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("country") or "ID")' 2>/dev/null || echo "ID")
+      SERVER_TZ=$(printf '%s' "$j" | python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("timezone") or "Asia/Jakarta")' 2>/dev/null || echo "Asia/Jakarta")
+    fi
+  fi
+}
+get_server_meta
+
 render_install(){
   clear
-  printf '\n'
-  printf "${PU2}╭────────────────────────────────────────────────────────────╮${N}\n"
-  printf "${PU2}│${N}  ${PK}✦ SANSXML VPN STORE ${N}${GY}INSTALLER${N} ${PU2}v$VERSION${N}             ${PU2}│${N}\n"
-  printf "${PU2}│${N}  ${CY}SSH${N} ${WH}•${N} ${CY}WS-SSH${N} ${WH}•${N} ${CY}XRAY${N} ${WH}•${N} ${CY}BBR/TCP${N}                 ${PU2}│${N}\n"
-  printf "${PU2}╰────────────────────────────────────────────────────────────╯${N}\n\n"
-  printf " ${GY}OS${N}      ${WH}%s${N}\n" "${PRETTY_NAME:-Ubuntu 20.04}"
-  printf " ${GY}ARCH${N}    ${WH}%s${N}\n" "$(uname -m)"
-  printf ' ${PU}────────────────────────────────────────────────────────────${N}\n\n'
-  printf '%-50s %s\n' 'Memasang paket dasar' "$(get_state pkg 'menunggu')"
-  printf '%-50s %s\n' 'Memasang Telegram API' "$(get_state telegram 'menunggu')"
-  printf '%-50s %s\n' 'Memasang Dropbear' "$(get_state dropbear 'menunggu')"
-  printf '%-50s %s\n' 'Memasang Nginx' "$(get_state nginx 'menunggu')"
-  printf '%-50s %s\n' 'Memasang HAProxy' "$(get_state haproxy 'menunggu')"
-  printf '%-50s %s\n' 'Membuat kunci SSH' "$(get_state key 'menunggu')"
-  printf '%-50s %s\n' 'Mengaktifkan vnstat' "$(get_state vnstat 'menunggu')"
-  printf '%-50s %s\n' 'Memasang WS-SSH' "$(get_state ws 'menunggu')"
-  printf '%-50s %s\n' 'Optimasi TCP / BBR / Keepalive' "$(get_state netopt 'menunggu')"
-  printf '%-50s %s\n' 'Memasang stunnel SSL' "$(get_state stunnel 'menunggu')"
-  printf '%-50s %s\n' 'Memasang UDPGW' "$(get_state udpgw 'menunggu')"
-  printf '%-50s %s\n' 'Mengatur firewall' "$(get_state firewall 'menunggu')"
-  printf '%-50s %s\n' 'Menjalankan layanan VPN' "$(get_state services 'menunggu')"
-  printf '\n────────────────────────────────────────────────────────────\n\n'
+  local now ip status
+  now=$(date '+%d %b %Y  %H:%M:%S')
+  ip=$(get_public_ip)
+  status="INSTALLING"
+  printf "\n${PU2}✦${N} ${WH}sansxml${N} ${PK}✦${N} ${PU2}INSTALLER${N} ${GY}$now${N}\n\n"
+  printf "${PU}┌─ ${PK}SYSTEM${PU} ──────────────────────────────────────────────────${PU}┐${N}\n"
+  printf " ${GY}│${N} ${GY}OS${N}        ${WH}%-22s${N} ${GY}ARCH${N}   ${WH}%-9s${N}${GY}│${N}\n" "${PRETTY_NAME:-Ubuntu 20.04 LTS}" "$(uname -m)"
+  printf " ${GY}│${N} ${GY}KERNEL${N}    ${WH}%-22s${N} ${GY}CPU${N}    ${WH}%-9s${N}${GY}│${N}\n" "$(uname -r)" "$(nproc) VCPU"
+  printf " ${GY}│${N} ${GY}RAM${N}       ${WH}%-22s${N} ${GY}DISK${N}   ${WH}%-9s${N}${GY}│${N}\n" "$(get_ram_pct)%" "$(get_disk_pct)%"
+  printf " ${GY}│${N} ${GY}UPTIME${N}    ${WH}%-22s${N} ${GY}STATUS${N}  ${GR}●${N} ${WH}%-8s${N}${GY}│${N}\n" "$(get_uptime_inst)" "$status"
+  printf " ${GY}├────────────────────────────────────────────────────────────┤${N}\n"
+  printf " ${GY}│${N} ${GY}IP${N}        ${WH}%-22s${N} ${GY}ISP${N}    ${WH}%-17s${N}${GY}│${N}\n" "$ip" "${SERVER_ISP:0:17}"
+  printf " ${GY}│${N} ${GY}CITY${N}      ${WH}%-22s${N} ${GY}REGION${N}  ${WH}%-17s${N}${GY}│${N}\n" "${SERVER_CITY:0:22}" "${SERVER_REGION:0:17}"
+  printf " ${GY}│${N} ${GY}COUNTRY${N}   ${WH}%-22s${N} ${GY}TZ${N}      ${WH}%-16s${N}${GY}│${N}\n" "${SERVER_COUNTRY} 🇮🇩" "${SERVER_TZ:0:16}"
+  printf "${PU}└────────────────────────────────────────────────────────────┘${N}\n\n"
+
+  printf "${PU}┌─ ${PK}PROGRESS${PU} ────────────────────────────────────────────────${PU}┐${N}\n"
+  printf " ${GR}│ ✓${N}  %-32s ${WH}%-11s${N}\n" 'Memasang paket dasar' "$(get_state pkg 'menunggu')"
+  printf " ${GR}│ ✓${N}  %-32s ${WH}%-11s${N}\n" 'Memasang Telegram API' "$(get_state telegram 'menunggu')"
+  printf " ${GR}│ ✓${N}  %-32s ${WH}%-11s${N}\n" 'Memasang Dropbear' "$(get_state dropbear 'menunggu')"
+  printf " ${GR}│ ✓${N}  %-32s ${WH}%-11s${N}\n" 'Memasang Nginx' "$(get_state nginx 'menunggu')"
+  printf " ${GR}│ ✓${N}  %-32s ${WH}%-11s${N}\n" 'Memasang HAProxy' "$(get_state haproxy 'menunggu')"
+  printf " ${GY}│ ·${N}  %-32s ${WH}%-11s${N}\n" 'Membuat kunci SSH' "$(get_state key 'menunggu')"
+  printf " ${GY}│ ·${N}  %-32s ${WH}%-11s${N}\n" 'Mengaktifkan vnstat' "$(get_state vnstat 'menunggu')"
+  printf " ${GY}│ ·${N}  %-32s ${WH}%-11s${N}\n" 'Memasang WS-SSH' "$(get_state ws 'menunggu')"
+  printf " ${GY}│ ·${N}  %-32s ${WH}%-11s${N}\n" 'Optimasi TCP / BBR / Keepalive' "$(get_state netopt 'menunggu')"
+  printf " ${GY}│ ·${N}  %-32s ${WH}%-11s${N}\n" 'Memasang stunnel SSL' "$(get_state stunnel 'menunggu')"
+  printf " ${GY}│ ·${N}  %-32s ${WH}%-11s${N}\n" 'Memasang UDPGW' "$(get_state udpgw 'menunggu')"
+  printf " ${GY}│ ·${N}  %-32s ${WH}%-11s${N}\n" 'Mengatur firewall' "$(get_state firewall 'menunggu')"
+  printf " ${GY}│ ·${N}  %-32s ${WH}%-11s${N}\n" 'Menjalankan layanan VPN' "$(get_state services 'menunggu')"
+  printf "${PU}└────────────────────────────────────────────────────────────┘${N}\n\n"
+
+  printf "${PU}┌─ ${PK}SERVICES${PU} ────────────────────────────────────────────────${PU}┐${N}\n"
+  local dots=""
+  for svc in ssh nginx dropbear haproxy stunnel4 udpgw ws-ssh xray; do
+    if systemctl is-active --quiet "$svc" 2>/dev/null; then dots+=" ${GR}●${N} $(printf '%-9s' "${svc^^}")"; else dots+=" ${RE}○${N} $(printf '%-9s' "${svc^^}")"; fi
+  done
+  printf " ${GY}│${N}%b${GY}│${N}\n" "$dots"
+  printf "${PU}└────────────────────────────────────────────────────────────┘${N}\n\n"
+  printf "${PU}┌─ ${PK}SUMMARY${PU} ─────────────────────────────────────────────────${PU}┐${N}\n"
+  printf " ${GY}│${N} ELAPSED   ${WH}%02d:%02d:%02d${N}       PACKAGES   ${WH}%s${N}\n" "$((($(date +%s)-INSTALL_START)/3600))" "$(( (($(date +%s)-INSTALL_START)%3600)/60 ))" "$((($(date +%s)-INSTALL_START)%60))" "$(get_state pkg '0 / 13')"
+  printf " ${GY}│${N} PORTS     ${WH}22 · 80 · 443 · 8080${N}   LOG        ${WH}%s${N}\n" "$LOG_FILE"
+  printf "${PU}└────────────────────────────────────────────────────────────┘${N}\n\n"
+  printf "${PK}©sansxml${N}\n"
 }
 
 finish_or_fail(){
@@ -153,6 +199,7 @@ _pkg_install(){
   apt-get install -y --no-install-recommends python3 python3-pip python3-venv sshpass curl wget unzip stunnel4 dropbear haproxy nginx net-tools cron ufw iptables openssl cmake build-essential git pkg-config bc procps dnsutils vnstat uuid-runtime socat
 }
 run_step pkg 'Memasang paket dasar' _pkg_install || exit 1
+get_server_meta
 run_step telegram 'Memasang Telegram API' bash -c 'pip3 install --break-system-packages --upgrade "python-telegram-bot>=21.5" requests qrcode pillow >/dev/null 2>&1 || pip3 install --upgrade "python-telegram-bot>=21.5" requests qrcode pillow >/dev/null 2>&1' || exit 1
 run_step_sh dropbear 'Memasang Dropbear' 'mkdir -p /etc/dropbear; if [ -f /etc/default/dropbear ]; then sed -i "s/^NO_START=.*/NO_START=0/" /etc/default/dropbear; sed -i "s/^DROPBEAR_PORT=.*/DROPBEAR_PORT=109/" /etc/default/dropbear; grep -q "^DROPBEAR_PORT=" /etc/default/dropbear || echo "DROPBEAR_PORT=109" >> /etc/default/dropbear; sed -i "/^DROPBEAR_EXTRA_ARGS=/d" /etc/default/dropbear; echo "DROPBEAR_EXTRA_ARGS=\"-p 109\"" >> /etc/default/dropbear; fi; cat > /etc/systemd/system/dropbear.service << "DROPBEARSVC"
 [Unit]
@@ -214,6 +261,9 @@ net.ipv4.tcp_fastopen=3
 net.ipv4.tcp_keepalive_time=60
 net.ipv4.tcp_keepalive_intvl=15
 net.ipv4.tcp_keepalive_probes=5
+net.ipv4.tcp_mtu_probing=1
+net.ipv4.tcp_syncookies=1
+net.ipv4.tcp_fin_timeout=15
 net.core.somaxconn=65535
 net.ipv4.tcp_max_syn_backlog=65535
 net.ipv4.ip_local_port_range=1024 65535
@@ -233,82 +283,134 @@ if command -v sshd >/dev/null 2>&1; then sshd -t; fi
 # 3. VPN SERVICES
 run_step_sh ws 'Memasang WS-SSH' 'cat > /usr/local/bin/ws-ssh.py << "WSEOF"
 #!/usr/bin/env python3
-import socket, threading, sys, hashlib, base64, logging
+import socket, threading, sys, base64, hashlib, logging, select
+
 LP = int(sys.argv[1]) if len(sys.argv) > 1 else 80
-logging.basicConfig(filename=f"/var/log/ws-ssh-{LP}.log",level=logging.INFO,format="%(asctime)s %(levelname)s %(message)s")
-def fwd(src,dst):
+BUF = 131072
+logging.basicConfig(filename=f"/var/log/ws-ssh-{LP}.log", level=logging.WARNING, format="%(asctime)s %(levelname)s %(message)s")
+
+def tune(s):
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_SNDBUF, BUF)
+    s.setsockopt(socket.SOL_SOCKET, socket.SO_RCVBUF, BUF)
+    s.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    try: s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPIDLE, 60)
+    except OSError: pass
+    try: s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPINTVL, 15)
+    except OSError: pass
+    try: s.setsockopt(socket.IPPROTO_TCP, socket.TCP_KEEPCNT, 4)
+    except OSError: pass
+
+def tunnel(a, b):
+    tune(a); tune(b)
+    sockets = [a, b]
     try:
         while True:
-            d=src.recv(65536)
-            if not d: break
-            dst.sendall(d)
-    except Exception: pass
+            readable, _, exceptional = select.select(sockets, [], sockets, 60)
+            if exceptional: break
+            if not readable:
+                continue
+            for src in readable:
+                dst = b if src is a else a
+                data = src.recv(BUF)
+                if not data: return
+                dst.sendall(data)
+    except (OSError, ValueError):
+        pass
     finally:
-        try: dst.shutdown(socket.SHUT_WR)
-        except Exception: pass
-def read_http_headers(c,first):
-    h=first
+        for s in (a, b):
+            try: s.shutdown(socket.SHUT_RDWR)
+            except OSError: pass
+            try: s.close()
+            except OSError: pass
+
+def recv_headers(c, first):
+    data = first
+    while b"\r\n\r\n" not in data and len(data) < 65536:
+        part = c.recv(8192)
+        if not part: break
+        data += part
+    return data
+
+def handle(c, addr):
+    ssh = None
     try:
-        while b"\r\n\r\n" not in h and len(h)<65536:
-            x=c.recv(4096)
-            if not x: break
-            h+=x
-    except Exception: pass
-    return h
-def handle(c,a):
-    ssh=None
-    try:
-        c.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
-    c.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
-    c.settimeout(5); first=b""
-        try: first=c.recv(4096)
-        except Exception: pass
-        if first and first.startswith((b"GET ",b"POST ",b"CONNECT ",b"HEAD ")):
-            h=read_http_headers(c,first); key=None; upgrade=False
-            for line in h.split(b"\r\n"):
-                low=line.lower()
-                if low.startswith(b"sec-websocket-key:"): key=line.split(b":",1)[1].strip()
-                elif low.startswith(b"upgrade:") and b"websocket" in low: upgrade=True
-            if key and upgrade:
-                accept=base64.b64encode(hashlib.sha1(key+b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest())
-                c.sendall(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: "+accept+b"\r\n\r\n")
-            elif first.startswith(b"CONNECT "): c.sendall(b"HTTP/1.1 200 Connection Established\\r\\n\\r\\n")
-        ssh=socket.create_connection(("127.0.0.1",22),timeout=10); ssh.settimeout(None); c.settimeout(None)
-        if first and not first.startswith((b"GET ",b"POST ",b"CONNECT ",b"HEAD ")): ssh.sendall(first)
-        t1=threading.Thread(target=fwd,args=(c,ssh),daemon=True); t2=threading.Thread(target=fwd,args=(ssh,c),daemon=True); t1.start(); t2.start(); t1.join(); t2.join()
-    except Exception as e: logging.warning("connection %s failed: %s",a,e)
+        tune(c); c.settimeout(8)
+        first = c.recv(8192)
+        if not first: return
+        initial_to_ssh = b""
+        if first.startswith((b"GET ", b"POST ", b"HEAD ", b"CONNECT ")):
+            req = recv_headers(c, first)
+            head, sep, remainder = req.partition(b"\r\n\r\n")
+            lines = head.split(b"\r\n")
+            method = lines[0].split(b" ", 1)[0].upper() if lines else b""
+            headers = {}
+            for line in lines[1:]:
+                if b":" in line:
+                    k, v = line.split(b":", 1); headers[k.strip().lower()] = v.strip()
+            is_ws = headers.get(b"upgrade", b"").lower() == b"websocket" and b"sec-websocket-key" in headers
+            if is_ws:
+                key = headers[b"sec-websocket-key"]
+                accept = base64.b64encode(hashlib.sha1(key + b"258EAFA5-E914-47DA-95CA-C5AB0DC85B11").digest())
+                c.sendall(b"HTTP/1.1 101 Switching Protocols\r\nUpgrade: websocket\r\nConnection: Upgrade\r\nSec-WebSocket-Accept: " + accept + b"\r\n\r\n")
+            elif method == b"CONNECT":
+                c.sendall(b"HTTP/1.1 200 Connection Established\r\nConnection: keep-alive\r\n\r\n")
+            else:
+                c.sendall(b"HTTP/1.1 200 Connection Established\r\nConnection: keep-alive\r\n\r\n")
+            # Payloads sent after the HTTP header are actual SSH bytes for raw WS/HTTP tunnel clients.
+            initial_to_ssh = remainder
+        else:
+            initial_to_ssh = first
+
+        ssh = socket.create_connection(("127.0.0.1", 22), timeout=10)
+        tune(ssh); ssh.settimeout(None); c.settimeout(None)
+        if initial_to_ssh: ssh.sendall(initial_to_ssh)
+        tunnel(c, ssh)
+    except Exception as e:
+        logging.warning("connection %s failed: %s", addr, e)
     finally:
-        try:
-            if ssh: ssh.close()
-        except Exception: pass
-        try: c.close()
-        except Exception: pass
+        for s in (c, ssh):
+            if s:
+                try: s.close()
+                except OSError: pass
+
 def main():
-    sv=socket.socket(socket.AF_INET,socket.SOCK_STREAM); sv.setsockopt(socket.SOL_SOCKET,socket.SO_REUSEADDR,1); sv.bind(("0.0.0.0",LP)); sv.listen(500); logging.info("WS-SSH listening on 0.0.0.0:%s",LP)
+    sv = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+    tune(sv); sv.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)
+    sv.bind(("0.0.0.0", LP)); sv.listen(1024)
+    logging.warning("WS-SSH listening on 0.0.0.0:%s", LP)
     while True:
-        try:
-            c,a=sv.accept(); threading.Thread(target=handle,args=(c,a),daemon=True).start()
-        except Exception as e: logging.warning("accept failed: %s",e)
+        c, a = sv.accept()
+        threading.Thread(target=handle, args=(c, a), daemon=True).start()
+
 if __name__ == "__main__": main()
 WSEOF
-chmod +x /usr/local/bin/ws-ssh.py
-for port in 80 8080; do svc="ws-ssh"; [ "$port" = "8080" ] && svc="ws-ssh-alt"; cat > /etc/systemd/system/${svc}.service << EOF
+chmod 755 /usr/local/bin/ws-ssh.py
+for port in 80 8080; do
+  svc="ws-ssh"; [ "$port" = "8080" ] && svc="ws-ssh-alt"
+  cat > /etc/systemd/system/${svc}.service << EOF
 [Unit]
-Description=WS-SSH $port
-After=network.target ssh.service
-Wants=ssh.service
+Description=SANSXML WS-SSH $port
+After=network-online.target ssh.service
+Wants=network-online.target ssh.service
+
 [Service]
 Type=simple
 ExecStart=/usr/bin/python3 /usr/local/bin/ws-ssh.py $port
 Restart=always
-RestartSec=2
-LimitNOFILE=100000
-StandardOutput=journal
-StandardError=journal
+RestartSec=1
+LimitNOFILE=200000
+NoNewPrivileges=true
+
 [Install]
 WantedBy=multi-user.target
 EOF
-done' || exit 1
+done
+systemctl daemon-reload
+systemctl enable ws-ssh ws-ssh-alt >/dev/null 2>&1
+systemctl restart ws-ssh ws-ssh-alt
+sleep 1
+systemctl is-active --quiet ws-ssh && systemctl is-active --quiet ws-ssh-alt' || exit 1
 run_step_sh stunnel 'Memasang stunnel SSL' 'mkdir -p /etc/stunnel; openssl req -new -x509 -days 3650 -nodes -out /etc/stunnel/stunnel.pem -keyout /etc/stunnel/stunnel.pem -subj "/CN=sansxml.local" 2>/dev/null; cat > /etc/stunnel/stunnel.conf << "EOF"
 pid = /var/run/stunnel4.pid
 debug = 4
@@ -2587,6 +2689,21 @@ PK='\033[1;34m'; WH='\033[1;37m'; GR='\033[1;34m'
 RE='\033[1;31m'; YE='\033[1;33m'; GY='\033[1;36m'; N='\033[0m'
 W=62
 get_ip(){ hostname -I 2>/dev/null | awk '{print $1}'; }
+get_city_isp(){
+    local cache=/tmp/sansxml-geo.cache
+    if [ -s "$cache" ] && [ $(( $(date +%s) - $(stat -c %Y "$cache" 2>/dev/null || echo 0) )) -lt 21600 ]; then cat "$cache"; return; fi
+    local city="-" isp="-" country="Indonesia"
+    if command -v curl >/dev/null 2>&1; then
+        local j=$(curl -4 -fsS --max-time 3 https://ipinfo.io/json 2>/dev/null || true)
+        if [ -n "$j" ]; then
+            city=$(printf '%s' "$j"|python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("city") or "-")' 2>/dev/null || echo "-")
+            isp=$(printf '%s' "$j"|python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("org") or "-")' 2>/dev/null || echo "-")
+            country=$(printf '%s' "$j"|python3 -c 'import sys,json; d=json.load(sys.stdin); print(d.get("country") or "ID")' 2>/dev/null || echo "ID")
+        fi
+    fi
+    printf '%s|%s|%s\n' "$city" "$isp" "$country" | tee "$cache"
+}
+
 get_uptime(){ local s=$(cat /proc/uptime|awk '{print int($1)}'); echo "$((s/86400))d $(((s%86400)/3600))h $(((s%3600)/60))m"; }
 get_ram_pct(){ local t=$(grep MemTotal /proc/meminfo|awk '{print $2}'); local a=$(grep MemAvailable /proc/meminfo|awk '{print $2}'); awk "BEGIN{printf \"%d\",($t-$a)/$t*100}"; }
 get_ram_h(){ local t=$(grep MemTotal /proc/meminfo|awk '{print $2}'); local a=$(grep MemAvailable /proc/meminfo|awk '{print $2}'); awk "BEGIN{printf \"%.1fG/%.1fG\",($t-$a)/1024/1024,$t/1024/1024}"; }
@@ -2643,7 +2760,7 @@ kvc(){ local key=$(printf '%-9s' "$1"); printf " ${GY}%s${N} ${PK}›${N} ${3}%s
 bar(){ local p=$1; local f=$((p/10)); local o=""; for ((i=1;i<=10;i++)); do [ $i -le $f ] && o="${o}█" || o="${o}░"; done; echo "$o"; }
 show_banner(){
     local os kernel cpu load ram disk up now ip bot ws ssl udp xry ngx drp hap
-    local sshc vmc vlc trc total onl
+    local sshc vmc vlc trc total onl city isp country geo
     os=$(grep PRETTY_NAME /etc/os-release 2>/dev/null | cut -d= -f2 | tr -d '"')
     kernel=$(uname -r 2>/dev/null)
     cpu=$(nproc 2>/dev/null || echo 0)
@@ -2651,6 +2768,7 @@ show_banner(){
     ram=$(get_ram_pct); disk=$(get_disk_pct); up=$(get_uptime)
     now=$(date '+%d %b %Y  %H:%M:%S')
     ip=$(get_ip)
+    geo=$(get_city_isp); IFS="|" read -r city isp country <<< "$geo"
     bot=$(systemctl is-active vpnbot 2>/dev/null); ws=$(systemctl is-active ws-ssh 2>/dev/null)
     ssl=$(systemctl is-active stunnel4 2>/dev/null); udp=$(systemctl is-active udpgw 2>/dev/null)
     xry=$(systemctl is-active xray 2>/dev/null); ngx=$(systemctl is-active nginx 2>/dev/null)
@@ -2667,7 +2785,8 @@ show_banner(){
     printf " ${GY}KERNEL${N}   ${WH}%s${N}   ${GY}LOAD${N} ${WH}%s${N}\n" "$kernel" "$load"
     printf " ${GY}RAM${N}      ${WH}%s  %s${N}   ${GY}DISK${N} ${WH}%s  %s${N}\n" "$(bar "$ram")" "${ram}%" "$(bar "$disk")" "${disk}%"
     printf " ${GY}UPTIME${N}   ${WH}%s${N}   ${GY}STATUS${N} ${GR}●${N} ${WH}ONLINE${N}\n" "$up"
-    printf " ${GY}IP${N}       ${WH}%s${N}\n" "$ip"
+    printf " ${GY}IP${N}       ${WH}%-18s${N} ${GY}ISP${N} ${WH}%s${N}\n" "$ip" "${isp:0:28}"
+    printf " ${GY}CITY${N}     ${WH}%-18s${N} ${GY}COUNTRY${N} ${WH}%s 🇮🇩${N}\n" "$city" "$country"
     printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
 
     printf "${PU}╭─ ${PK}TRAFFIC${PU} ────────────────────────────────────────────────────╮${N}\n"
@@ -2772,7 +2891,7 @@ show_vps_info(){ clear; show_banner; box_top "VPS INFORMATION"
     box_mid "DISK"
     kv "Total" "$(df -h /|tail -1|awk '{print $2}')"; kv "Used" "$(df -h /|tail -1|awk '{print $3}') ($(get_disk_pct)%)"
     kv "Free" "$(df -h /|tail -1|awk '{print $4}')"
-    box_mid "NETWORK"; kvc "Public IP" "$(get_ip)" "${GR}"
+    box_mid "NETWORK"; kvc "Public IP" "$(get_ip)" "${GR}"; geo=$(get_city_isp); IFS="|" read -r city isp country <<< "$geo"; kv "ISP" "$isp"; kv "City" "$city"; kv "Country" "$country 🇮🇩"
     kv "SSH Port" "22"; kv "WS-SSH" "80, 8080"; kv "SSL" "443, 8443"
     kv "UDPGW" "7300"; kv "Xray" "10001-10007"
     box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read; }
