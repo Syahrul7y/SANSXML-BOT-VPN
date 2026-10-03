@@ -2612,321 +2612,82 @@ show_banner(){ clear
     drp=$(systemctl is-active dropbear 2>/dev/null); hap=$(systemctl is-active haproxy 2>/dev/null)
     sshc=$(get_ssh_count); vmc=$(get_xray_count vmess); vlc=$(get_xray_count vless); trc=$(get_xray_count trojan)
     total=$((sshc+vmc+vlc+trc)); onl=$(get_online)
-    today=$(get_traffic_pair d); month=$(get_traffic_pair m); downv=$(awk '{print $1}' <<< "$today"); upv=$(awk '{print $2}' <<< "$today"); tv=$(awk '{print $3}' <<< "$today"); speed=$(get_speed 2>/dev/null)
+    today=$(get_traffic_pair d); month=$(get_traffic_pair m)
+    downv=$(awk '{print $1}' <<< "$today"); upv=$(awk '{print $2}' <<< "$today"); tv=$(awk '{print $3}' <<< "$today")
+    speed=$(get_speed 2>/dev/null)
 
     echo ""
-    center_text "──✦ SCRIPT AUTO INSTAL VPN V2.1 ✦──" 62
-    center_text "$now" 62
+    center_text "${WH}──✦ SCRIPT AUTO INSTAL VPN V2.1 ✦──${N}" 62
+    center_text "${GY}${now}${N}" 62
     echo ""
 
     # SERVER INFORMATION
     printf "${WH}╭%*s╮${N}\n" "$INNER" '' | sed 's/ /─/g'
-    center_text "🖥️ SERVER INFORMATION" "$((BOX+2))"
-    printf "${WH}│${N} ${WH}├─ OS       %-29s${N}${WH}│${N}\n" "${os:0:29}"
-    printf "${WH}│${N} ${WH}├─ Kernel   %-29s${N}${WH}│${N}\n" "${kernel:0:29}"
-    printf "${WH}│${N} ${WH}├─ RAM      %s %3s%%${N}%*s${WH}│${N}\n" "$(bar "$ram")" "$ram" $((15-${#ram})) ''
-    printf "${WH}│${N} ${WH}├─ Disk     %s %3s%%${N}%*s${WH}│${N}\n" "$(bar "$disk")" "$disk" $((15-${#disk})) ''
-    printf "${WH}│${N} ${WH}└─ Uptime   %-29s${N}${WH}│${N}\n" "$up"
+    printf "${WH}│${N}   ${CY}🖥️ SERVER INFORMATION${N}%*s${WH}│${N}\n" 17 ''
+    printf "${WH}│${N}   ${GY}├─${N} ${WH}OS       %-29s${N}${WH}│${N}\n" "${os:0:29}"
+    printf "${WH}│${N}   ${GY}├─${N} ${WH}Kernel   %-29s${N}${WH}│${N}\n" "${kernel:0:29}"
+    printf "${WH}│${N}   ${GY}├─${N} ${WH}RAM      ${N}%s ${GR}%3s%%${N}%*s${WH}│${N}\n" "$(bar "$ram")" "$ram" $((15-${#ram})) ''
+    printf "${WH}│${N}   ${GY}├─${N} ${WH}Disk     ${N}%s ${GR}%3s%%${N}%*s${WH}│${N}\n" "$(bar "$disk")" "$disk" $((15-${#disk})) ''
+    printf "${WH}│${N}   ${GY}└─${N} ${WH}Uptime   %-29s${N}${WH}│${N}\n" "$up"
     printf "${WH}╰%*s╯${N}\n" "$INNER" '' | sed 's/ /─/g'
     echo ""
 
     # NETWORK
     printf "${WH}╭%*s╮${N}\n" "$INNER" '' | sed 's/ /─/g'
-    center_text "🌐 NETWORK" "$((BOX+2))"
-    printf "${WH}│${N} ${WH}├─ IP       %-29s${N}${WH}│${N}\n" "${ip:0:29}"
-    printf "${WH}│${N} ${WH}├─ ISP      %-29s${N}${WH}│${N}\n" "${isp:0:29}"
-    printf "${WH}│${N} ${WH}└─ Country  %-29s${N}${WH}│${N}\n" "${country:-Indonesia}"
+    printf "${WH}│${N}   ${CY}🌐 NETWORK${N}%*s${WH}│${N}\n" 26 ''
+    printf "${WH}│${N}   ${GY}├─${N} ${WH}IP       %-29s${N}${WH}│${N}\n" "${ip:0:29}"
+    printf "${WH}│${N}   ${GY}├─${N} ${WH}ISP      %-29s${N}${WH}│${N}\n" "${isp:0:29}"
+    printf "${WH}│${N}   ${GY}└─${N} ${WH}Country  %-29s${N}${WH}│${N}\n" "${country:-Indonesia}"
     printf "${WH}╰%*s╯${N}\n" "$INNER" '' | sed 's/ /─/g'
     echo ""
 
     # SERVICES
     printf "${WH}╭%*s╮${N}\n" "$INNER" '' | sed 's/ /─/g'
-    center_text "⚙️ SERVICES" "$((BOX+2))"
-    printf "${WH}│${N} ${WH}├─ SSH${N}                                       ${WH}│${N}\n"
-    printf "${WH}│${N} ${WH}├─ UDP${N}                                       ${WH}│${N}\n"
-    printf "${WH}│${N} ${WH}├─ SSL${N}                                       ${WH}│${N}\n"
-    printf "${WH}│${N} ${WH}├─ Nginx${N}                                     ${WH}│${N}\n"
-    printf "${WH}│${N} ${WH}├─ Xray${N}                                      ${WH}│${N}\n"
-    printf "${WH}│${N} ${WH}├─ Dropbear${N}                                  ${WH}│${N}\n"
-    printf "${WH}│${N} ${WH}├─ HAProxy${N}                                   ${WH}│${N}\n"
-    printf "${WH}│${N} ${WH}└─ Trojan${N}                                    ${WH}│${N}\n"
+    printf "${WH}│${N}   ${CY}⚙️ SERVICES${N}%*s${WH}│${N}\n" 27 ''
+    printf "${WH}│${N}   ${GY}├─${N} ${WH}SSH${N}                                      ${WH}│${N}\n"
+    printf "${WH}│${N}   ${GY}├─${N} ${WH}UDP${N}                                      ${WH}│${N}\n"
+    printf "${WH}│${N}   ${GY}├─${N} ${WH}SSL${N}                                      ${WH}│${N}\n"
+    printf "${WH}│${N}   ${GY}├─${N} ${WH}Nginx${N}                                    ${WH}│${N}\n"
+    printf "${WH}│${N}   ${GY}├─${N} ${WH}Xray${N}                                     ${WH}│${N}\n"
+    printf "${WH}│${N}   ${GY}├─${N} ${WH}Dropbear${N}                                 ${WH}│${N}\n"
+    printf "${WH}│${N}   ${GY}├─${N} ${WH}HAProxy${N}                                  ${WH}│${N}\n"
+    printf "${WH}│${N}   ${GY}└─${N} ${WH}Trojan${N}                                   ${WH}│${N}\n"
     printf "${WH}╰%*s╯${N}\n" "$INNER" '' | sed 's/ /─/g'
     echo ""
 
     # TRAFFIC
     printf "${WH}╭%*s╮${N}\n" "$INNER" '' | sed 's/ /─/g'
-    center_text "📊 TRAFFIC" "$((BOX+2))"
-    printf "${WH}│${N} ${WH}├─ Upload     %-10s   Download  %-10s${N} ${WH}│${N}\n" "$upv" "$downv"
-    printf "${WH}│${N} ${WH}├─ Total      %-10s   Bandwidth %-9s${N} ${WH}│${N}\n" "$tv" "N/A"
-    printf "${WH}│${N} ${WH}└─ Speed      %-29s${N}${WH}│${N}\n" "$speed"
+    printf "${WH}│${N}   ${CY}📊 TRAFFIC${N}%*s${WH}│${N}\n" 27 ''
+    printf "${WH}│${N}   ${GY}├─${N} ${WH}Upload     %-10s  Download  %-10s${N}${WH}│${N}\n" "${upv:-0}" "${downv:-0}"
+    printf "${WH}│${N}   ${GY}├─${N} ${WH}Total      %-10s  Bandwidth %-9s${N}${WH}│${N}\n" "${tv:-0}" "N/A"
+    printf "${WH}│${N}   ${GY}└─${N} ${WH}Speed      %-29s${N}${WH}│${N}\n" "${speed:-0}"
     printf "${WH}╰%*s╯${N}\n" "$INNER" '' | sed 's/ /─/g'
     echo ""
 
     # ACCOUNTS
     printf "${WH}╭%*s╮${N}\n" "$INNER" '' | sed 's/ /─/g'
-    center_text "👤 ACCOUNTS" "$((BOX+2))"
-    printf "${WH}│${N} ${WH}├─ VMESS %s • VLESS %s • TROJAN %s${N}  ${WH}│${N}\n" "$vmc" "$vlc" "$trc"
-    printf "${WH}│${N} ${WH}└─ SSH %s • TOTAL %s${N}                          ${WH}│${N}\n" "$sshc" "$total"
+    printf "${WH}│${N}   ${CY}👤 ACCOUNTS${N}%*s${WH}│${N}\n" 26 ''
+    printf "${WH}│${N}   ${GY}└─${N} ${WH}VMESS ${CY}%s${N} • ${WH}VLESS ${CY}%s${N} • ${WH}TROJAN ${CY}%s${N} • ${WH}SSH ${CY}%s${N} • ${WH}TOTAL ${GR}%s${N}%*s${WH}│${N}\n" "$vmc" "$vlc" "$trc" "$sshc" "$total" 1 ''
+    printf "${WH}╰%*s╯${N}\n" "$INNER" '' | sed 's/ /─/g'
+    echo ""
+
+    # MAIN MENU
+    printf "${WH}╭%*s╮${N}\n" "$INNER" '' | sed 's/ /─/g'
+    printf "${WH}│${N}   ${PU}✦ MAIN MENU${N}%*s${WH}│${N}\n" 27 ''
+    printf "${WH}│${N}   ${CY}├─${N} ${WH}[1]${N} ${CY}DAFTAR USER${N}       ${WH}[4]${N} ${CY}CEK SERVICE${N}%*s${WH}│${N}\n" 3 ''
+    printf "${WH}│${N}   ${CY}├─${N} ${WH}[2]${N} ${CY}INFORMATION VPS${N}   ${WH}[5]${N} ${CY}JALANKAN BOT${N}%*s${WH}│${N}\n" 3 ''
+    printf "${WH}│${N}   ${CY}└─${N} ${WH}[3]${N} ${CY}BACKUP / RESTORE${N}  ${WH}[6]${N} ${CY}EXIT${N}%*s${WH}│${N}\n" 7 ''
+    printf "${WH}╰%*s╯${N}\n" "$INNER" '' | sed 's/ /─/g'
+    printf "${WH}╭%*s╮${N}\n" "$INNER" '' | sed 's/ /─/g'
+    printf "${WH}│${N}   ${PU}✦${N} ${WH}Select [1-6] ›${N}%*s${WH}│${N}\n" 18 ''
+    printf "${WH}│${N}%*s${PK}❖  powered by ©sansxml  ❖${N}%*s${WH}│${N}\n" 8 '' 8 ''
     printf "${WH}╰%*s╯${N}\n" "$INNER" '' | sed 's/ /─/g'
 }
-status_dot(){ [ "$1" = "active" ] && printf "${GR}●${N}" || printf "${RE}●${N}"; }
-get_xray_count(){
-    local proto="$1" f="/root/vpnbot_accounts.json"
-    [ ! -f "$f" ] && { echo 0; return; }
-    python3 - "$proto" "$f" <<'PYCODE'
-import json,sys
-proto,path=sys.argv[1],sys.argv[2]
-try:
-    d=json.load(open(path))
-    print(sum(1 for a in d.values() if a.get("proto")==proto))
-except Exception:
-    print(0)
-PYCODE
-}
-get_ssh_count(){
-    local f="/root/vpnbot_accounts.json"
-    [ ! -f "$f" ] && { echo 0; return; }
-    python3 - "$f" <<'PYCODE'
-import json,sys
-try:
-    d=json.load(open(sys.argv[1])); print(sum(1 for a in d.values() if a.get("proto","ssh")=="ssh"))
-except Exception:
-    print(0)
-PYCODE
-}
-get_traffic_pair(){
-    local mode="$1"
-    command -v vnstat >/dev/null 2>&1 || { echo "0 MiB  0 MiB  0 MiB"; return; }
-    vnstat --json "$mode" 1 2>/dev/null | python3 -c '
-import sys,json
-mode=sys.argv[1]
-try:
-    d=json.load(sys.stdin); ifs=d.get("interfaces",[])
-    arr=ifs[0].get("traffic",{}).get("day" if mode=="d" else "month",[]) if ifs else []
-    x=arr[-1] if arr else {}
-    rx=float(x.get("rx",0)); tx=float(x.get("tx",0)); total=rx+tx
-    def fmt(v):
-        if v >= 1024**3: return f"{v/1024**3:.1f} GiB"
-        return f"{v/1024**2:.0f} MiB"
-    print(f"{fmt(rx)}  {fmt(tx)}  {fmt(total)}")
-except Exception:
-    print("0 MiB  0 MiB  0 MiB")
-' "$mode"
-}
-get_speed(){
-    local a rx1 tx1 rx2 tx2
-    a=$(awk 'NR>2{gsub(":","",$1);rx+=$2;tx+=$10}END{print rx,tx}' /proc/net/dev)
-    sleep 1
-    local b=$(awk 'NR>2{gsub(":","",$1);rx+=$2;tx+=$10}END{print rx,tx}' /proc/net/dev)
-    rx1=$(awk '{print $1}' <<<"$a"); tx1=$(awk '{print $2}' <<<"$a")
-    rx2=$(awk '{print $1}' <<<"$b"); tx2=$(awk '{print $2}' <<<"$b")
-    awk -v r=$((rx2-rx1)) -v t=$((tx2-tx1)) 'BEGIN{printf "%.2f Mbit/s",((r+t)*8)/1000000}'
-}
-get_cpu_pct(){
-    local a b
-    a=$(awk '/^cpu /{print $2+$3+$4+$5+$6+$7+$8, $5}' /proc/stat)
-    sleep 0.2
-    b=$(awk '/^cpu /{print $2+$3+$4+$5+$6+$7+$8, $5}' /proc/stat)
-    awk -v a="$a" -v b="$b" 'BEGIN { split(a,x); split(b,y); dt=y[1]-x[1]; di=y[2]-x[2]; if (dt > 0) printf "%d", ((dt-di)/dt)*100; else printf "0" }'
-}
-show_user_list(){ clear
-    show_banner
-    printf "\n${PU}╭─ ${PK}DAFTAR USER${PU} ─────────────────────────────────────────────────╮${N}\n"
-    printf "${WH}%-16s %-16s %-7s %-11s %-12s %s${N}\n" "USERNAME" "EXP DATE" "QUOTA" "LIMIT IP" "BLOKIR" "STATUS"
-    printf "${PU}────────────────────────────────────────────────────────────────────────────${N}\n"
-
-    if [ ! -f /root/vpnbot_accounts.json ]; then
-        printf " ${GY}Belum ada akun.${N}\n"
-    else
-        python3 - <<'PYUSERS'
-import json, subprocess
-from datetime import datetime
-
-ACCOUNTS="/root/vpnbot_accounts.json"
-BLOCKS="/root/vpnbot_blocked.json"
-
-try:
-    accounts=json.load(open(ACCOUNTS, encoding="utf-8"))
-except Exception:
-    accounts={}
-
-try:
-    blocks=json.load(open(BLOCKS, encoding="utf-8"))
-except Exception:
-    blocks={}
-
-try:
-    who=subprocess.check_output(["who"], text=True, stderr=subprocess.DEVNULL)
-except Exception:
-    who=""
-
-online={}
-for line in who.splitlines():
-    parts=line.split()
-    if not parts:
-        continue
-    un=parts[0]
-    ip="-"
-    if "(" in line and ")" in line:
-        ip=line.rsplit("(",1)[1].split(")",1)[0]
-    online.setdefault(un, ip)
-
-rows=[]
-for key,a in accounts.items():
-    if not isinstance(a,dict):
-        continue
-    if a.get("proto","ssh") != "ssh":
-        continue
-
-    un=str(a.get("username") or key)
-
-    try:
-        exp=datetime.strptime(str(a.get("exp",""))[:10], "%Y-%m-%d").strftime("%d %b, %Y")
-    except Exception:
-        exp=str(a.get("exp","-"))[:16] or "-"
-
-    limit=str(a.get("limit_ip",1) or 1) + " IP"
-
-    b=blocks.get(un)
-    if b:
-        blokir=str(b.get("ip") or b.get("blocked_ip") or "BLOCKED")
-    else:
-        blokir="NORMAL"
-
-    status="ONLINE" if un in online else "OFFLINE"
-    rows.append((un,exp,"0",limit,blokir,status))
-
-rows.sort(key=lambda x:x[0].lower())
-
-for un,exp,quota,limit,blokir,status in rows:
-    print(f"{un:<16} {exp:<16} {quota:<7} {limit:<11} {blokir:<12} {status}")
-
-if not rows:
-    print("Belum ada akun SSH.")
-PYUSERS
-    fi
-
-    printf "${PU}────────────────────────────────────────────────────────────────────────────${N}\n"
-    echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"
-    read
-}
-
-backup_menu(){
-    while true; do
-        clear
-        show_banner
-        printf "\n${PU}╭─ ${PK}BACKUP / RESTORE${PU} ─────────────────────────────────────────────╮${N}\n"
-        printf " ${CY}[1]${N}  ${WH}RESET SC CLEAR${N}\n"
-        printf " ${CY}[2]${N}  ${WH}AUTO BACKUP${N}             ${GY}$(backup_status_text)${N}\n"
-        printf " ${CY}[3]${N}  ${WH}RESTORE BACKUP GITHUB${N}    ${GY}PUBLIC / NO TOKEN${N}\n"
-        printf " ${CY}[0]${N}  ${WH}KEMBALI${N}\n"
-        printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
-        echo -ne "${PU2}✦${N} ${CY}Select${N} ${WH}[0-3]${N} ${PU2}›${N} "
-        read -r bc
-        case "$bc" in
-            1|01) reset_sc_clear ;;
-            2|02) toggle_auto_backup ;;
-            3|03) reset_github_backup ;;
-            0|00) return ;;
-            *) echo -e "\n  ${RE}Pilihan tidak valid${N}"; sleep 1 ;;
-        esac
-    done
-}
-backup_status_text(){
-    if crontab -l 2>/dev/null | grep -q 'vpnbot_backup.sh'; then
-        printf 'AKTIF'
-    else
-        printf 'TIDAK AKTIF'
-    fi
-}
-toggle_auto_backup(){
-    if crontab -l 2>/dev/null | grep -q 'vpnbot_backup.sh'; then
-        crontab -l 2>/dev/null | grep -v 'vpnbot_backup.sh' | crontab -
-        clear; show_banner; box_top "AUTO BACKUP"
-        kvc "Status" "TIDAK AKTIF" "${YE}"
-        kv "Cron" "Dinonaktifkan"
-        box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read
-    else
-        if [ ! -x /root/vpnbot_backup.sh ]; then
-            clear; show_banner; box_top "AUTO BACKUP"
-            kvc "Status" "GAGAL DIAKTIFKAN" "${RE}"
-            kv "Keterangan" "File /root/vpnbot_backup.sh belum tersedia"
-            kv "Solusi" "Setup backup dari bot terlebih dahulu"
-            box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read
-            return
-        fi
-        ( crontab -l 2>/dev/null; echo '*/5 * * * * /root/vpnbot_backup.sh >/dev/null 2>&1' ) | crontab -
-        clear; show_banner; box_top "AUTO BACKUP"
-        kvc "Status" "AKTIF" "${GR}"
-        kv "Interval" "Setiap 5 menit"
-        box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read
-    fi
-}
-reset_sc_clear(){
-    # RESET SC CLEAR = pencopotan penuh SC.
-    # Fungsi uninstall didefinisikan di bawah, tetapi tersedia saat menu dijalankan.
-    uninstall_sc
-}
-
-reset_github_backup(){
-    clear; show_banner
-    box_top "RESTORE BACKUP GITHUB"
-    printf " ${WH}Repo public:${N} ${CY}Syahrul7y/SANSXML-BOT-VPN${N}
-"
-    printf " ${GY}Mode ini tanpa token: hanya mengambil ulang isi branch main.${N}
-"
-    printf " ${YE}Tidak dapat menghapus/mengubah isi repo GitHub remote tanpa autentikasi.${N}
-
-"
-    echo -ne "${RE}Ketik RESET${N} untuk melanjutkan ${PU}›${N} "
-    read -r confirm
-    [ "$confirm" != "RESET" ] && { echo -e "\n  ${GY}Dibatalkan.${N}"; sleep 1; return; }
-
-    local url="https://github.com/Syahrul7y/SANSXML-BOT-VPN.git"
-    local tmp="/tmp/sansxml-public-backup"
-    rm -rf "$tmp" /root/vpnbot_backup
-    mkdir -p /root/vpnbot_backup
-
-    echo -e "\n  ${PU2}Mengambil backup public dari GitHub...${N}"
-    if command -v git >/dev/null 2>&1 && git clone --depth 1 --branch main "$url" "$tmp" >/dev/null 2>&1; then
-        rm -rf /root/vpnbot_backup
-        mv "$tmp" /root/vpnbot_backup
-        # Hapus metadata git agar backup baru bersifat lokal/read-only tanpa credential.
-        rm -rf /root/vpnbot_backup/.git
-        clear; show_banner; box_top "RESTORE BACKUP GITHUB"
-        kvc "Result" "✓ RESTORE PUBLIC BERHASIL" "${GR}"
-        kv "Repository" "Syahrul7y/SANSXML-BOT-VPN"
-        kv "Branch" "main"
-        kv "Token" "Tidak digunakan"
-        kv "Mode" "Public / Read Only"
-    else
-        rm -rf "$tmp"
-        clear; show_banner; box_top "RESTORE BACKUP GITHUB"
-        kvc "Result" "✗ GAGAL RESTORE PUBLIC" "${RE}"
-        kv "Repository" "Syahrul7y/SANSXML-BOT-VPN"
-        kv "Branch" "main"
-        kv "Keterangan" "Repo tidak bisa di-clone atau branch main tidak tersedia"
-    fi
-    box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read
-}
-
 
 show_menu(){
     clear
     show_banner
-    local INNER=40
-    echo ""
-    printf "${WH}╭%*s╮${N}\n" "$INNER" '' | sed 's/ /─/g'
-    center_text "✦ MAIN MENU" 42
-    printf "${WH}│${N} ${WH}├─ [1] DAFTAR USER       [4] CEK SERVICE${N}%*s${WH}│${N}\n" 1 ''
-    printf "${WH}│${N} ${WH}├─ [2] INFORMATION VPS   [5] JALANKAN BOT${N}%*s${WH}│${N}\n" 1 ''
-    printf "${WH}│${N} ${WH}└─ [3] BACKUP / RESTORE  [6] EXIT${N}%*s${WH}│${N}\n" 7 ''
-    printf "${WH}╰%*s╯${N}\n" "$INNER" '' | sed 's/ /─/g'
-    printf "${WH}╭%*s╮${N}\n" "$INNER" '' | sed 's/ /─/g'
-    printf "${WH}│${N} ${WH}✦ Select [1-6] ›${N}%*s${WH}│${N}\n" 19 ''
-    center_text "❖  powered by ©sansxml  ❖" 42
-    printf "${WH}╰%*s╯${N}\n" "$INNER" '' | sed 's/ /─/g'
-    echo -ne "${WH}Select:${N} "
+    echo -ne "${WH}Select [1-6] › ${N}"
     read choice
     case "$choice" in
         1|01) show_user_list ;;
@@ -2938,6 +2699,7 @@ show_menu(){
         *) echo -e "\n  ${RE}Pilihan tidak valid${N}"; sleep 1 ;;
     esac
 }
+
 show_vps_info(){ clear; show_banner; box_top "VPS INFORMATION"
     kv "OS" "$(grep PRETTY_NAME /etc/os-release|cut -d= -f2|tr -d '"')"
     kv "Kernel" "$(uname -r)"; kv "Arch" "$(uname -m)"; kv "Hostname" "$(hostname)"
