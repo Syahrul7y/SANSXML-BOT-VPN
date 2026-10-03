@@ -517,14 +517,12 @@ systemctl restart ssh 2>/dev/null || systemctl restart sshd
 # Token Telegram sengaja dikosongkan saat instalasi.
 # Token hanya diisi melalui menu [05] ADD TOKEN BOT.
 BOT_TOKEN=""
-GH_USER="Syahrul7y"; GH_REPO="Backup"
+GH_USER="Syahrul7y"; GH_REPO="SANSXML-BOT-VPN"
 GH_EMAIL="hodamkecil@gmail.com"
-GH_TOKEN=""
 
 cat > /etc/sansxml-backup.conf << GHCFG
 GH_USER="${GH_USER}"
 GH_REPO="${GH_REPO}"
-GH_TOKEN=""
 GH_EMAIL="${GH_EMAIL}"
 GHCFG
 chmod 600 /etc/sansxml-backup.conf
@@ -623,22 +621,25 @@ def save_json(p, d):
     with open(p,"w") as f: json.dump(d,f,indent=2,ensure_ascii=False)
 
 def load_backup_conf():
-    d = {"GH_USER":"","GH_REPO":"","GH_TOKEN":"","GH_EMAIL":""}
+    d = {"GH_USER":"","GH_REPO":"","GH_EMAIL":""}
     if os.path.exists("/etc/sansxml-backup.conf"):
         with open("/etc/sansxml-backup.conf") as f:
             for line in f:
                 for k in d.keys():
                     if line.startswith(k + "="):
                         d[k] = line.split("=",1)[1].strip().strip('"').strip()
+        # Migrasi konfigurasi lama: hapus GH_TOKEN dari file SC.
+        try: save_backup_conf(d["GH_USER"],d["GH_REPO"],d["GH_EMAIL"])
+        except: pass
     return d
-def save_backup_conf(ghu,ghr,ght,ghe):
+def save_backup_conf(ghu,ghr,ghe):
     with open("/etc/sansxml-backup.conf","w") as f:
-        f.write(f'GH_USER="{ghu}"\nGH_REPO="{ghr}"\nGH_TOKEN="{ght}"\nGH_EMAIL="{ghe}"\n')
+        f.write(f'GH_USER="{ghu}"\nGH_REPO="{ghr}"\nGH_EMAIL="{ghe}"\n')
     try: os.chmod("/etc/sansxml-backup.conf",0o600)
     except: pass
 def is_backup_ready():
     c = load_backup_conf()
-    return all([c.get("GH_USER"),c.get("GH_REPO"),c.get("GH_TOKEN"),c.get("GH_EMAIL")])
+    return all([c.get("GH_USER"),c.get("GH_REPO")])
 
 def is_local_server(k):
     if k not in SERVERS: return True
@@ -977,60 +978,48 @@ def server_realtime_status(key):
         return False, None
 
 def backup_config_text():
-    c = load_backup_conf(); g = c.get("GH_TOKEN","") or ""
-    t = f"{g[:4]}{'*'*(len(g)-8)}{g[-4:]}" if len(g)>12 else ("*"*len(g) if g else "(kosong)")
-    st = "✅ Aktif" if is_backup_ready() else "❌ Belum diisi"
-    return "\n".join(["<blockquote>","🔄 <b>BACKUP</b>","───────────────────────",
+    c = load_backup_conf()
+    st = "✅ Siap" if is_backup_ready() else "❌ Belum diisi"
+    return "\n".join(["<blockquote>","🔄 <b>BACKUP PUBLIC</b>","───────────────────────",
              f"├ Status   : <b>{st}</b>",f"├ Username : <code>{c.get('GH_USER','-')}</code>",
              f"├ Repo     : <code>{c.get('GH_REPO','-')}</code>",
-             f"├ Email    : <code>{c.get('GH_EMAIL','-')}</code>",
-             f"╰ Token    : <code>{t}</code>","───────────────────────",
-             "🔄 <i>Backup otomatis tiap 5 menit.</i>","</blockquote>"])
+             "╰ Mode     : <b>PUBLIC / NO TOKEN</b>","───────────────────────",
+             "🔄 <i>GitHub digunakan sebagai sumber restore public.</i>","</blockquote>"])
 
 def sync_push_now():
-    if not is_backup_ready(): return False,"Backup belum siap"
-    try:
-        sp = "/root/vpnbot_backup.sh"
-        if not os.path.exists(sp): return False,"No script"
-        r = subprocess.run(["bash",sp],capture_output=True,text=True,timeout=45)
-        return r.returncode==0,(r.stderr or r.stdout or "")[:200]
-    except Exception as e: return False,str(e)[:200]
+    # Public GitHub tanpa autentikasi hanya dapat dibaca, bukan di-push.
+    return False,"Public GitHub read-only tanpa token"
 async def sync_push_async():
-    try: await asyncio.to_thread(sync_push_now)
-    except: pass
+    return False,"Public GitHub read-only tanpa token"
 
 def _write_backup_sh():
+    # Backup lokal saja; tidak pernah mengirim password/token ke repo public.
     with open("/root/vpnbot_backup.sh","w") as f:
-        f.write('''#!/bin/bash
-source /etc/sansxml-backup.conf 2>/dev/null
-cd /root/vpnbot_backup || exit 1
-for f in vpnbot_users.json vpnbot_balance.json vpnbot_accounts.json vpnbot_trial.json vpnbot_trx.json vpnbot_blocked.json vpnbot_config.json bot.py; do
-    [ -f "/root/$f" ] && cp "/root/$f" "./$f"
-done
-git add -A
-if ! git diff --cached --quiet; then
-    git -c user.email="$GH_EMAIL" -c user.name="$GH_USER" commit -m "Auto backup: $(date)" -q
-    git push "https://${GH_USER}:${GH_TOKEN}@github.com/${GH_USER}/${GH_REPO}.git" HEAD:main -q 2>/dev/null || {
-        git pull --no-rebase -X ours "https://${GH_USER}:${GH_TOKEN}@github.com/${GH_USER}/${GH_REPO}.git" main -q 2>/dev/null
-        git push "https://${GH_USER}:${GH_TOKEN}@github.com/${GH_USER}/${GH_REPO}.git" HEAD:main -q 2>/dev/null
-    }
-fi
-''')
-    os.chmod("/root/vpnbot_backup.sh",0o755)
-def setup_backup_env(ghu,ghr,ght,ghe):
+        f.write("\n".join([
+            "#!/bin/bash",
+            "set -e",
+            "mkdir -p /root/vpnbot_backup",
+            "for f in vpnbot_users.json vpnbot_balance.json vpnbot_accounts.json vpnbot_trial.json vpnbot_trx.json vpnbot_blocked.json; do",
+            '    [ -f "/root/$f" ] && cp "/root/$f" "/root/vpnbot_backup/$f"',
+            "done",
+            ""
+        ]))
+    os.chmod("/root/vpnbot_backup.sh",0o700)
+
+def setup_backup_env(ghu,ghr,ghe):
     try:
-        bdir = "/root/vpnbot_backup"; os.makedirs(bdir,exist_ok=True)
-        if not os.path.exists(f"{bdir}/.git"): subprocess.run(["git","init","-q"],cwd=bdir,capture_output=True)
-        subprocess.run(["git","config","user.email",ghe],cwd=bdir,capture_output=True)
-        subprocess.run(["git","config","user.name",ghu],cwd=bdir,capture_output=True)
-        subprocess.run(["git","branch","-M","main"],cwd=bdir,capture_output=True)
-        remote = f"https://{ghu}:{ght}@github.com/{ghu}/{ghr}.git"
-        subprocess.run(["git","remote","remove","origin"],cwd=bdir,capture_output=True)
-        subprocess.run(["git","remote","add","origin",remote],cwd=bdir,capture_output=True)
-        for br in ["main","master"]:
-            r = subprocess.run(["git","pull","origin",br,"--allow-unrelated-histories","--no-rebase","-X","ours"],
-                cwd=bdir,capture_output=True,text=True,timeout=30)
-            if r.returncode==0: break
+        bdir = "/root/vpnbot_backup"
+        tmp = f"/tmp/sansxml-public-{int(time.time())}"
+        shutil.rmtree(tmp,ignore_errors=True)
+        if not shutil.which("git"): return False,"Git belum terpasang"
+        url = f"https://github.com/{ghu}/{ghr}.git"
+        r = subprocess.run(["git","clone","--depth","1","--branch","main",url,tmp],capture_output=True,text=True,timeout=45)
+        if r.returncode != 0:
+            shutil.rmtree(tmp,ignore_errors=True)
+            return False,"Repo public/branch main tidak dapat diambil"
+        shutil.rmtree(bdir,ignore_errors=True)
+        shutil.move(tmp,bdir)
+        shutil.rmtree(os.path.join(bdir,".git"),ignore_errors=True)
         restored = 0
         for f in ["vpnbot_users.json","vpnbot_balance.json","vpnbot_accounts.json",
                   "vpnbot_trial.json","vpnbot_trx.json","vpnbot_blocked.json"]:
@@ -1041,11 +1030,9 @@ def setup_backup_env(ghu,ghr,ght,ghe):
                     with open(f"/root/{f}","w") as ff: ff.write(c)
                     restored += 1
         _write_backup_sh()
-        subprocess.run("crontab -l 2>/dev/null | grep -v vpnbot_backup.sh | crontab -",shell=True)
-        subprocess.run('( crontab -l 2>/dev/null; echo "*/5 * * * * /root/vpnbot_backup.sh >/dev/null 2>&1" ) | crontab -',shell=True)
-        subprocess.run(["bash","/root/vpnbot_backup.sh"],capture_output=True,timeout=60)
         return True,restored
-    except Exception as e: return False,str(e)
+    except Exception as e:
+        return False,str(e)
 
 def restore_ssh_users():
     accs = load_json(ACCOUNTS_FILE,{}); today = datetime.now().date(); c = 0; s = 0
@@ -1094,95 +1081,14 @@ def wipe_local():
 def reset_backup(keep=True):
     r = {"github":False,"local":{},"ts":time.strftime("%Y%m%d_%H%M%S"),"gh_error":""}
     try:
-        c = load_backup_conf()
-        ghu = c.get("GH_USER",""); ghr = c.get("GH_REPO","")
-        ght = c.get("GH_TOKEN",""); ghe = c.get("GH_EMAIL","bot@local")
-        if ghu and ghr and ght:
-            remote = f"https://{ghu}:{ght}@github.com/{ghu}/{ghr}.git"
-            tmp = f"/tmp/vpnbot_wipe_{r['ts']}"
-            shutil.rmtree(tmp,ignore_errors=True); os.makedirs(tmp,exist_ok=True)
-            try:
-                subprocess.run(["git","init","-q"],cwd=tmp,capture_output=True)
-                subprocess.run(["git","config","user.email",ghe],cwd=tmp,capture_output=True)
-                subprocess.run(["git","config","user.name",ghu],cwd=tmp,capture_output=True)
-                subprocess.run(["git","checkout","--orphan","main"],cwd=tmp,capture_output=True)
-                with open(f"{tmp}/README.md","w") as f: f.write(f"# VPN Backup\nReset {r['ts']}\n")
-                subprocess.run(["git","add","-A"],cwd=tmp,capture_output=True)
-                subprocess.run(["git","-c",f"user.email={ghe}","-c",f"user.name={ghu}",
-                    "commit","-m",f"RESTORE {r['ts']}"],cwd=tmp,capture_output=True)
-                subprocess.run(["git","remote","add","origin",remote],cwd=tmp,capture_output=True)
-                pushed = False; err = ""
-                for br in ["main","master"]:
-                    subprocess.run(["git","branch","-M",br],cwd=tmp,capture_output=True)
-                    rr = subprocess.run(["git","push","-f","origin",br],cwd=tmp,capture_output=True,text=True,timeout=45)
-                    err = (rr.stderr or rr.stdout or "").strip()
-                    if rr.returncode==0: pushed=True; break
-                r["github"] = pushed
-                if not pushed: r["gh_error"] = err.replace(ght,"***")[:300]
-            finally: shutil.rmtree(tmp,ignore_errors=True)
         r["local"] = wipe_local()
         if not keep and os.path.exists("/etc/sansxml-backup.conf"):
             try: os.remove("/etc/sansxml-backup.conf")
             except: pass
-        if r["github"] and ghu and ghr and ght:
-            try: setup_backup_env(ghu,ghr,ght,ghe)
-            except: pass
         return True,r
-    except Exception as e: return False,{"error":str(e)[:200]}
+    except Exception as e:
+        return False,{"error":str(e)}
 
-# KEYBOARDS
-
-def kb_dash(uid):
-    rows = [[B("➕  BUAT AKUN","buat_akun",style="primary"),B("⌛  TRIAL AKUN","trial_akun",style="primary")],
-        [B("➕ PERPANJANG AKUN","perpanjang_akun",style="primary")],
-        [B("💰 TOPUP SALDO","isi_saldo",style="primary"),B("📁 AKUN SAYA","my_accs",style="primary")],
-        [B("🌐 STATUS SERVER","admin|server_status",style="primary")],
-        [B("📢 CHANNEL",url="https://t.me/infoovpnnnn",style="primary"),B("☎️ ADMIN",url="tg://user?id=6144358600",style="primary")],
-        [B("♻️ REFRESH","refresh",style="danger")]]
-    if is_owner(uid):
-        rows.append([B("⚙️ PENGATURAN","admin|menu",style="danger")])
-    return InlineKeyboardMarkup(rows)
-def kb_saldo():
-    return InlineKeyboardMarkup([
-        [B("1","saldo_num|1",style="primary"),B("2","saldo_num|2",style="primary"),B("3","saldo_num|3",style="primary")],
-        [B("4","saldo_num|4",style="primary"),B("5","saldo_num|5",style="primary"),B("6","saldo_num|6",style="primary")],
-        [B("7","saldo_num|7",style="primary"),B("8","saldo_num|8",style="primary"),B("9","saldo_num|9",style="primary")],
-        [B("⬅️ Hapus","saldo_hapus",style="danger"),B("0","saldo_num|0",style="primary"),B("✅ Konfirmasi","saldo_konfirmasi",style="success")],
-        [B("🔙 Kembali","menu|main",style="danger")]])
-def kb_layanan():
-    return InlineKeyboardMarkup([
-        [B("➕ SSH","pilih|ssh",style="primary")],
-        [B("➕ VMESS","pilih|vmess",style="primary"),B("➕ VLESS","pilih|vless",style="primary")],
-        [B("➕ TROJAN","pilih|trojan",style="primary")],
-        [B("🔙 KEMBALI","menu|main",style="danger")]])
-def kb_srv_ssh():
-    a = get_active_servers(); r = []; ks = list(a.keys())
-    for i in range(0,len(ks),2):
-        row = []
-        for j in range(i,min(i+2,len(ks))):
-            k = ks[j]; row.append(B(a[k]['name'],f"buat|{k}",style="primary"))
-        r.append(row)
-    if not r: r.append([B("⚠️ Belum ada server","noop",style="danger")])
-    r.append([B("🔙 KEMBALI","pilih_layanan",style="danger")])
-    return InlineKeyboardMarkup(r)
-def kb_srv_lock():
-    a = get_active_servers(); r = []; ks = list(a.keys())
-    for i in range(0,len(ks),2):
-        row = []
-        for j in range(i,min(i+2,len(ks))):
-            k = ks[j]; row.append(B(a[k]['name'],"ssh_locked",style="primary"))
-        r.append(row)
-    r.append([B("🔙 KEMBALI","ssh_locked",style="danger")])
-    return InlineKeyboardMarkup(r)
-def kb_srv_ext():
-    a = get_active_servers(); r = []; ks = list(a.keys())
-    for i in range(0,len(ks),2):
-        row = []
-        for j in range(i,min(i+2,len(ks))):
-            k = ks[j]; row.append(B(a[k]['name'],f"extend|{k}",style="primary"))
-        r.append(row)
-    r.append([B("🔙 KEMBALI","menu|main",style="danger")])
-    return InlineKeyboardMarkup(r)
 def kb_xray_srv(proto):
     a = get_active_servers(); r = []; ks = list(a.keys())
     for i in range(0,len(ks),2):
@@ -1202,7 +1108,7 @@ def kb_admin():
 def kb_backup():
     return InlineKeyboardMarkup([
         [B("👤 Ganti Username","backup_edit|user",style="primary"),B("📁 Ganti Repo","backup_edit|repo",style="primary")],
-        [B("🔑 Ganti Token","backup_edit|token",style="primary"),B("📧 Ganti Email","backup_edit|email",style="primary")],
+        [B("📧 Ganti Email","backup_edit|email",style="primary")],
         [B("📊 Restore Data","backup_reset",style="danger")],
         [B("🔙 Kembali","admin|menu",style="danger")]])
 def kb_acc_det(un):
@@ -1706,7 +1612,7 @@ async def cb(u,c):
         if not is_owner(uid): return
         f = d.split("|")[1]; c.user_data["backup_field"] = f
         pr = {"user":"Kirim <b>username GitHub</b>:","repo":"Kirim <b>nama repo</b>:",
-              "token":"Kirim <b>GitHub token</b> (ghp_xxx):","email":"Kirim <b>email GitHub</b>:"}
+              "email":"Kirim <b>email GitHub</b>:"}
         try: await q.edit_message_text(f"✏️ <b>GANTI {f.upper()}</b>\n\n{pr.get(f,'')}",
             reply_markup=InlineKeyboardMarkup([[B("❌ Batal","admin|backup",style="danger")]]),parse_mode="HTML")
         except: pass
@@ -2287,9 +2193,6 @@ async def msg(u,c):
     bf = c.user_data.get("backup_field")
     if bf and is_owner(uid):
         c.user_data["backup_field"] = None
-        if bf == "token":
-            try: await u.message.delete()
-            except: pass
         old = load_backup_conf(); conf = dict(old); err = None
         if bf == "user":
             if not re.match(r'^[a-zA-Z0-9-]+$',t): err = "Invalid"
@@ -2297,9 +2200,6 @@ async def msg(u,c):
         elif bf == "repo":
             if not re.match(r'^[a-zA-Z0-9._-]+$',t): err = "Invalid"
             else: conf["GH_REPO"] = t
-        elif bf == "token":
-            if not (t.startswith("ghp_") or t.startswith("github_pat_")) or len(t)<20: err = "Format: ghp_xxx"
-            else: conf["GH_TOKEN"] = t
         elif bf == "email":
             if "@" not in t or "." not in t: err = "Invalid"
             else: conf["GH_EMAIL"] = t
@@ -2307,8 +2207,8 @@ async def msg(u,c):
             await u.message.reply_text(f"❌ {err}\n\nCoba lagi:",parse_mode="HTML")
             c.user_data["backup_field"] = bf; return
         changed = (old.get(f"GH_{bf.upper()}") != conf.get(f"GH_{bf.upper()}"))
-        save_backup_conf(conf["GH_USER"],conf["GH_REPO"],conf["GH_TOKEN"],conf["GH_EMAIL"])
-        allok = all([conf["GH_USER"],conf["GH_REPO"],conf["GH_TOKEN"],conf["GH_EMAIL"]])
+        save_backup_conf(conf["GH_USER"],conf["GH_REPO"],conf["GH_EMAIL"])
+        allok = all([conf["GH_USER"],conf["GH_REPO"]])
         if allok:
             nt = "⏳ <b>Pull dari GitHub...</b>"
             if changed: nt = "⏳ <b>Field berubah!</b>"
@@ -2318,7 +2218,7 @@ async def msg(u,c):
                     try: shutil.rmtree("/root/vpnbot_backup")
                     except: pass
                 subprocess.run("crontab -l 2>/dev/null | grep -v vpnbot_backup.sh | crontab -",shell=True)
-            ok,info = await asyncio.to_thread(setup_backup_env,conf["GH_USER"],conf["GH_REPO"],conf["GH_TOKEN"],conf["GH_EMAIL"])
+            ok,info = await asyncio.to_thread(setup_backup_env,conf["GH_USER"],conf["GH_REPO"],conf["GH_EMAIL"])
             if ok:
                 cc,sc = await asyncio.to_thread(restore_ssh_users)
                 try: await notify.delete()
@@ -2556,7 +2456,7 @@ async def post_init(app):
     if is_backup_ready():
         try:
             c = load_backup_conf()
-            ok,r = await asyncio.to_thread(setup_backup_env,c["GH_USER"],c["GH_REPO"],c["GH_TOKEN"],c["GH_EMAIL"])
+            ok,r = await asyncio.to_thread(setup_backup_env,c["GH_USER"],c["GH_REPO"],c["GH_EMAIL"])
             if ok: logger.info(f"[STARTUP-PULL] {r}")
         except Exception as e: logger.error(f"[STARTUP-PULL] {e}")
     try:
@@ -2888,13 +2788,15 @@ backup_menu(){
         printf "\n${PU}╭─ ${PK}BACKUP / RESTORE${PU} ─────────────────────────────────────────────╮${N}\n"
         printf " ${CY}[1]${N}  ${WH}RESET SC CLEAR${N}\n"
         printf " ${CY}[2]${N}  ${WH}AUTO BACKUP${N}             ${GY}$(backup_status_text)${N}\n"
+        printf " ${CY}[3]${N}  ${WH}RESTORE BACKUP GITHUB${N}    ${GY}PUBLIC / NO TOKEN${N}\n"
         printf " ${CY}[0]${N}  ${WH}KEMBALI${N}\n"
         printf "${PU}╰──────────────────────────────────────────────────────────────╯${N}\n\n"
-        echo -ne "${PU2}✦${N} ${CY}Select${N} ${WH}[0-2]${N} ${PU2}›${N} "
+        echo -ne "${PU2}✦${N} ${CY}Select${N} ${WH}[0-3]${N} ${PU2}›${N} "
         read -r bc
         case "$bc" in
             1|01) reset_sc_clear ;;
             2|02) toggle_auto_backup ;;
+            3|03) reset_github_backup ;;
             0|00) return ;;
             *) echo -e "\n  ${RE}Pilihan tidak valid${N}"; sleep 1 ;;
         esac
@@ -2931,38 +2833,53 @@ toggle_auto_backup(){
     fi
 }
 reset_sc_clear(){
+    # RESET SC CLEAR = pencopotan penuh SC.
+    # Fungsi uninstall didefinisikan di bawah, tetapi tersedia saat menu dijalankan.
+    uninstall_sc
+}
+
+reset_github_backup(){
     clear; show_banner
-    box_top "RESET SC CLEAR"
-    printf " ${YE}Tindakan ini akan menghapus data akun bot dan user SSH yang dibuat SC.${N}\n"
-    printf " ${GY}Backup GitHub tidak dihapus.${N}\n\n"
-    echo -ne "${RE}Ketik RESET untuk melanjutkan${N} ${PU}›${N} "
+    box_top "RESTORE BACKUP GITHUB"
+    printf " ${WH}Repo public:${N} ${CY}Syahrul7y/SANSXML-BOT-VPN${N}
+"
+    printf " ${GY}Mode ini tanpa token: hanya mengambil ulang isi branch main.${N}
+"
+    printf " ${YE}Tidak dapat menghapus/mengubah isi repo GitHub remote tanpa autentikasi.${N}
+
+"
+    echo -ne "${RE}Ketik RESET${N} untuk melanjutkan ${PU}›${N} "
     read -r confirm
     [ "$confirm" != "RESET" ] && { echo -e "\n  ${GY}Dibatalkan.${N}"; sleep 1; return; }
-    echo -e "\n  ${PU2}Membersihkan data...${N}"
-    python3 - <<'PYRESET'
-import json, os, subprocess
-acc='/root/vpnbot_accounts.json'
-tracked=[]
-try:
-    data=json.load(open(acc, encoding='utf-8'))
-    if isinstance(data,dict):
-        tracked=[u for u in data.keys() if isinstance(u,str) and u and u!='root']
-except Exception:
-    pass
-for u in tracked:
-    subprocess.run(['pkill','-9','-u',u],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-    subprocess.run(['userdel','-r',u],stdout=subprocess.DEVNULL,stderr=subprocess.DEVNULL)
-for f in ('vpnbot_users.json','vpnbot_balance.json','vpnbot_accounts.json','vpnbot_trial.json','vpnbot_trx.json','vpnbot_blocked.json'):
-    try: os.remove('/root/'+f)
-    except Exception: pass
-PYRESET
-    clear; show_banner; box_top "RESET SC CLEAR"
-    kvc "Result" "✓ RESET SC SELESAI" "${GR}"
-    kv "Data JSON" "Dibersihkan"
-    kv "User SSH" "Dihapus"
-    kv "Backup GitHub" "Tidak dihapus"
+
+    local url="https://github.com/Syahrul7y/SANSXML-BOT-VPN.git"
+    local tmp="/tmp/sansxml-public-backup"
+    rm -rf "$tmp" /root/vpnbot_backup
+    mkdir -p /root/vpnbot_backup
+
+    echo -e "\n  ${PU2}Mengambil backup public dari GitHub...${N}"
+    if command -v git >/dev/null 2>&1 && git clone --depth 1 --branch main "$url" "$tmp" >/dev/null 2>&1; then
+        rm -rf /root/vpnbot_backup
+        mv "$tmp" /root/vpnbot_backup
+        # Hapus metadata git agar backup baru bersifat lokal/read-only tanpa credential.
+        rm -rf /root/vpnbot_backup/.git
+        clear; show_banner; box_top "RESTORE BACKUP GITHUB"
+        kvc "Result" "✓ RESTORE PUBLIC BERHASIL" "${GR}"
+        kv "Repository" "Syahrul7y/SANSXML-BOT-VPN"
+        kv "Branch" "main"
+        kv "Token" "Tidak digunakan"
+        kv "Mode" "Public / Read Only"
+    else
+        rm -rf "$tmp"
+        clear; show_banner; box_top "RESTORE BACKUP GITHUB"
+        kvc "Result" "✗ GAGAL RESTORE PUBLIC" "${RE}"
+        kv "Repository" "Syahrul7y/SANSXML-BOT-VPN"
+        kv "Branch" "main"
+        kv "Keterangan" "Repo tidak bisa di-clone atau branch main tidak tersedia"
+    fi
     box_bot; echo ""; echo -ne "${PK}◆${N} ${PU2}ENTER untuk kembali...${N}"; read
 }
+
 
 show_menu(){ clear
     show_banner
@@ -3171,7 +3088,7 @@ while true; do
         3|03) backup_menu ;;
         4|04) show_services ;;
         5|05) run_bot ;;
-        6|06) uninstall_sc ;;
+        6|06) clear; exit 0 ;;
         *) echo ""; echo -e "  ${RE}Pilihan tidak valid${N}"; sleep 1 ;;
     esac
 done
