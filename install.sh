@@ -4,11 +4,11 @@ CYAN='\033[1;36m'; GREEN='\033[1;32m'; RED='\033[1;31m'
 YELLOW='\033[1;33m'; MAGENTA='\033[1;35m'; WHITE='\033[1;37m'; BLUE='\033[1;34m'; NC='\033[0m'
 # Installer/menu palette: cyan + purple/blue + white + green status
 PU='\033[1;34m'; PU2='\033[1;36m'; PK='\033[1;35m'; GY='\033[1;36m'; WH='\033[1;37m'; GR='\033[1;32m'; RE='\033[1;31m'
-VERSION="2.3.0"
+VERSION="2.4.0"
 LOG_FILE="/var/log/sansxml.log"
 mkdir -p "$(dirname "$LOG_FILE")"
 : > "$LOG_FILE"
-exec > >(tee -a "$LOG_FILE") 2>&1
+exec >>"$LOG_FILE" 2>&1
 
 STATE_DIR=/tmp/sansxml-installer-state
 mkdir -p "$STATE_DIR"
@@ -46,65 +46,17 @@ get_server_meta(){
 }
 get_server_meta
 
-render_install(){
-  clear
-  local now ip status
-  now=$(date '+%d %b %Y  %H:%M:%S')
-  ip=$(get_public_ip)
-  status="INSTALLING"
-  printf "\n${PU2}✦${N} ${WH}sansxml${N} ${PK}✦${N} ${PU2}INSTALLER${N} ${GY}$now${N}\n\n"
-  printf "${PU}┌─ ${PK}SYSTEM${PU} ──────────────────────────────────────────────────${PU}┐${N}\n"
-  printf " ${GY}│${N} ${GY}OS${N}        ${WH}%-22s${N} ${GY}ARCH${N}   ${WH}%-9s${N}${GY}│${N}\n" "${PRETTY_NAME:-Ubuntu 20.04 LTS}" "$(uname -m)"
-  printf " ${GY}│${N} ${GY}KERNEL${N}    ${WH}%-22s${N} ${GY}CPU${N}    ${WH}%-9s${N}${GY}│${N}\n" "$(uname -r)" "$(nproc) VCPU"
-  printf " ${GY}│${N} ${GY}RAM${N}       ${WH}%-22s${N} ${GY}DISK${N}   ${WH}%-9s${N}${GY}│${N}\n" "$(get_ram_pct)%" "$(get_disk_pct)%"
-  printf " ${GY}│${N} ${GY}UPTIME${N}    ${WH}%-22s${N} ${GY}STATUS${N}  ${GR}●${N} ${WH}%-8s${N}${GY}│${N}\n" "$(get_uptime_inst)" "$status"
-  printf " ${GY}├────────────────────────────────────────────────────────────┤${N}\n"
-  printf " ${GY}│${N} ${GY}IP${N}        ${WH}%-22s${N} ${GY}ISP${N}    ${WH}%-17s${N}${GY}│${N}\n" "$ip" "${SERVER_ISP:0:17}"
-  printf " ${GY}│${N} ${GY}CITY${N}      ${WH}%-22s${N} ${GY}REGION${N}  ${WH}%-17s${N}${GY}│${N}\n" "${SERVER_CITY:0:22}" "${SERVER_REGION:0:17}"
-  printf " ${GY}│${N} ${GY}COUNTRY${N}   ${WH}%-22s${N} ${GY}TZ${N}      ${WH}%-16s${N}${GY}│${N}\n" "${SERVER_COUNTRY} 🇮🇩" "${SERVER_TZ:0:16}"
-  printf "${PU}└────────────────────────────────────────────────────────────┘${N}\n\n"
-
-  printf "${PU}┌─ ${PK}PROGRESS${PU} ────────────────────────────────────────────────${PU}┐${N}\n"
-  printf " ${GR}│ ✓${N}  %-32s ${WH}%-11s${N}\n" 'Memasang paket dasar' "$(get_state pkg 'menunggu')"
-  printf " ${GR}│ ✓${N}  %-32s ${WH}%-11s${N}\n" 'Memasang Telegram API' "$(get_state telegram 'menunggu')"
-  printf " ${GR}│ ✓${N}  %-32s ${WH}%-11s${N}\n" 'Memasang Dropbear' "$(get_state dropbear 'menunggu')"
-  printf " ${GR}│ ✓${N}  %-32s ${WH}%-11s${N}\n" 'Memasang Nginx' "$(get_state nginx 'menunggu')"
-  printf " ${GR}│ ✓${N}  %-32s ${WH}%-11s${N}\n" 'Memasang HAProxy' "$(get_state haproxy 'menunggu')"
-  printf " ${GY}│ ·${N}  %-32s ${WH}%-11s${N}\n" 'Membuat kunci SSH' "$(get_state key 'menunggu')"
-  printf " ${GY}│ ·${N}  %-32s ${WH}%-11s${N}\n" 'Mengaktifkan vnstat' "$(get_state vnstat 'menunggu')"
-  printf " ${GY}│ ·${N}  %-32s ${WH}%-11s${N}\n" 'Memasang WS-SSH' "$(get_state ws 'menunggu')"
-  printf " ${GY}│ ·${N}  %-32s ${WH}%-11s${N}\n" 'Optimasi TCP / BBR / Keepalive' "$(get_state netopt 'menunggu')"
-  printf " ${GY}│ ·${N}  %-32s ${WH}%-11s${N}\n" 'Memasang stunnel SSL' "$(get_state stunnel 'menunggu')"
-  printf " ${GY}│ ·${N}  %-32s ${WH}%-11s${N}\n" 'Memasang UDPGW' "$(get_state udpgw 'menunggu')"
-  printf " ${GY}│ ·${N}  %-32s ${WH}%-11s${N}\n" 'Mengatur firewall' "$(get_state firewall 'menunggu')"
-  printf " ${GY}│ ·${N}  %-32s ${WH}%-11s${N}\n" 'Menjalankan layanan VPN' "$(get_state services 'menunggu')"
-  printf "${PU}└────────────────────────────────────────────────────────────┘${N}\n\n"
-
-  printf "${PU}┌─ ${PK}SERVICES${PU} ────────────────────────────────────────────────${PU}┐${N}\n"
-  local dots=""
-  for svc in ssh nginx dropbear haproxy stunnel4 udpgw ws-ssh xray; do
-    if systemctl is-active --quiet "$svc" 2>/dev/null; then dots+=" ${GR}●${N} $(printf '%-9s' "${svc^^}")"; else dots+=" ${RE}○${N} $(printf '%-9s' "${svc^^}")"; fi
-  done
-  printf " ${GY}│${N}%b${GY}│${N}\n" "$dots"
-  printf "${PU}└────────────────────────────────────────────────────────────┘${N}\n\n"
-  printf "${PU}┌─ ${PK}SUMMARY${PU} ─────────────────────────────────────────────────${PU}┐${N}\n"
-  printf " ${GY}│${N} ELAPSED   ${WH}%02d:%02d:%02d${N}       PACKAGES   ${WH}%s${N}\n" "$((($(date +%s)-INSTALL_START)/3600))" "$(( (($(date +%s)-INSTALL_START)%3600)/60 ))" "$((($(date +%s)-INSTALL_START)%60))" "$(get_state pkg '0 / 13')"
-  printf " ${GY}│${N} PORTS     ${WH}22 · 80 · 443 · 8080${N}   LOG        ${WH}%s${N}\n" "$LOG_FILE"
-  printf "${PU}└────────────────────────────────────────────────────────────┘${N}\n\n"
-  printf "${PK}©sansxml${N}\n"
-}
+render_install(){ :; }
 
 finish_or_fail(){
   local name=$1 rc=$2
   if [ "$rc" -eq 0 ]; then set_state "$name" 'selesai'; else set_state "$name" 'gagal'; fi
-  render_install
   return "$rc"
 }
 
 run_step(){
   local name=$1 label=$2; shift 2
-  set_state "$name" '◐ sedang berjalan'
-  render_install
+  set_state "$name" 'sedang berjalan'
   "$@" >>"$LOG_FILE" 2>&1
   local rc=$?
   finish_or_fail "$name" "$rc"
@@ -113,8 +65,7 @@ run_step(){
 
 run_step_sh(){
   local name=$1 label=$2; shift 2
-  set_state "$name" '◐ sedang berjalan'
-  render_install
+  set_state "$name" 'sedang berjalan'
   bash -c "$*" >>"$LOG_FILE" 2>&1
   local rc=$?
   finish_or_fail "$name" "$rc"
@@ -123,50 +74,16 @@ run_step_sh(){
 
 spin(){
   local pid=$1 msg=$2
-  if [ "$msg" = "Install Core VPN" ]; then
-    set_state core '◐ sedang berjalan'
-    local started=$(date +%s)
-    while kill -0 "$pid" 2>/dev/null; do
-      local now=$(date +%s) elapsed=$(( $(date +%s) - started )) pct=$((18 + elapsed*5))
-      [ "$pct" -gt 99 ] && pct=99
-      XRAY_VERSION="$(xray version 2>/dev/null | awk 'NR==1{print $2; exit}' || true)"
-      [ -z "$XRAY_VERSION" ] && XRAY_VERSION="26.3.27"
-      XRAY_PROGRESS="$pct"; XRAY_ELAPSED="$(printf '%s.%s' "$elapsed" "$((RANDOM%10))")"
-      render_install
-      printf 'Memasang Core VPN\n\nXray v%s\n' "$XRAY_VERSION"
-      bar "$pct" "$XRAY_ELAPSED"
-      printf '\n────────────────────────────────────────────────────────────\n\n'
-      printf 'Mohon tunggu  ·  jangan tutup terminal\n\n'
-      printf '────────────────────────────────────────────────────────────\n'
-      sleep 0.4
-    done
-    wait "$pid"; local rc=$?
-    if [ "$rc" -eq 0 ]; then
-      XRAY_PROGRESS=100; XRAY_ELAPSED="$(printf '%s.%s' "$(( $(date +%s)-started ))" "$((RANDOM%10))")"
-      set_state core 'selesai'
-    else
-      set_state core 'gagal'
-    fi
-    return "$rc"
-  fi
-  while kill -0 "$pid" 2>/dev/null; do sleep 0.1; done
-  wait "$pid"; return $?
+  while kill -0 "$pid" 2>/dev/null; do sleep 0.2; done
+  wait "$pid"
+  return $?
 }
 
 core_fail(){
-  local elapsed=$(( $(date +%s) - INSTALL_START ))
-  render_install
-  printf 'Memasang Core VPN\n\n'
-  printf 'Xray %s\n\n' "${XRAY_VERSION:-unknown}"
-  bar "${XRAY_PROGRESS:-0}" "${XRAY_ELAPSED:-0.0}s"
-  printf '\n────────────────────────────────────────────────────────────\n\n'
-  printf 'Pemasangan gagal  ·  %02d:%02d\n' $((elapsed/60)) $((elapsed%60))
-  printf 'Periksa log: %s\n\n' "$LOG_FILE"
-  printf '────────────────────────────────────────────────────────────\n\n'
+  echo "ERROR: Pemasangan Core VPN gagal. Lihat log: $LOG_FILE" >&2
   exit 1
 }
 
-clear
 INSTALL_START=$(date +%s)
 set_state pkg '◐ sedang berjalan'
 render_install
@@ -254,10 +171,12 @@ run_step_sh vnstat 'Mengaktifkan vnstat' 'systemctl enable vnstat >/dev/null 2>&
 run_step_sh netopt 'Optimasi TCP / BBR / Keepalive' 'set -e
 modprobe tcp_bbr 2>/dev/null || true
 cat > /etc/sysctl.d/99-sansxml-speed.conf << "SYSCTLEOF"
-# SANSXML TCP performance / connection stability
-net.core.default_qdisc=fq
-net.ipv4.tcp_congestion_control=bbr
+# SANSXML Universal Network: gaming + live streaming + browsing + VPN
+# Prefer a paced queue and BBR; fall back safely when the kernel lacks BBR.
+net.core.default_qdisc=fq_codel
+net.ipv4.tcp_congestion_control=cubic
 net.ipv4.tcp_fastopen=3
+net.ipv4.tcp_slow_start_after_idle=0
 net.ipv4.tcp_keepalive_time=60
 net.ipv4.tcp_keepalive_intvl=15
 net.ipv4.tcp_keepalive_probes=5
@@ -267,8 +186,19 @@ net.ipv4.tcp_fin_timeout=15
 net.core.somaxconn=65535
 net.ipv4.tcp_max_syn_backlog=65535
 net.ipv4.ip_local_port_range=1024 65535
+# Moderate socket buffers: enough for high-throughput streaming without huge queues.
+net.core.rmem_max=33554432
+net.core.wmem_max=33554432
+net.ipv4.tcp_rmem=4096 131072 33554432
+net.ipv4.tcp_wmem=4096 131072 33554432
 SYSCTLEOF
 sysctl --system >/dev/null 2>&1
+# BBR is used when supported by this kernel; otherwise keep fq_codel + CUBIC.
+if modprobe tcp_bbr 2>/dev/null && grep -qw bbr /proc/sys/net/ipv4/tcp_allowed_congestion_control 2>/dev/null; then
+  sysctl -w net.ipv4.tcp_congestion_control=bbr >/dev/null 2>&1 || true
+  sysctl -w net.core.default_qdisc=fq >/dev/null 2>&1 || true
+fi
+# Disable GRO/GSO/TSO tuning only when explicitly supported; leave NIC defaults intact.
 mkdir -p /etc/ssh/sshd_config.d
 cat > /etc/ssh/sshd_config.d/98-sansxml-tcp.conf << "SSHTCPEOF"
 ClientAliveInterval 60
@@ -426,9 +356,7 @@ cert = /etc/stunnel/stunnel.pem
 EOF
 sed -i "s/^ENABLED=.*/ENABLED=1/" /etc/default/stunnel4 2>/dev/null || echo "ENABLED=1" >> /etc/default/stunnel4' || exit 1
 
-# Keep UDPGW visibly active while it is being built, matching the requested installer UI.
-set_state udpgw '◐ sedang berjalan'
-render_install
+set_state udpgw 'sedang berjalan'
 (
   systemctl stop udpgw 2>/dev/null || true
   rm -rf /tmp/badvpn
