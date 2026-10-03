@@ -267,16 +267,49 @@ EOF
   mkdir -p "$DNSTT_DIR"
   chmod 700 "$DNSTT_DIR"
 
-  # Build DNSTT. Prefer the upstream mirror on GitHub because some VPS DNS
-  # resolvers cannot reach the original git host reliably.
-  if ! command -v go >/dev/null 2>&1; then
-    apt-get update -y >>/tmp/sansxml-dnstt-build.log 2>&1 || true
-    apt-get install -y --no-install-recommends golang-go >>/tmp/sansxml-dnstt-build.log 2>&1 || true
+  # Build DNSTT. Ubuntu 20.04's repository Go can be too old for the
+  # current DNSTT source, so use a self-contained modern Go toolchain only
+  # for this build. It does not replace the VPS package-managed Go.
+  DNSTT_GO_ROOT=/usr/local/sansxml-go
+  DNSTT_GO_VERSION=1.25.14
+  case "$(uname -m)" in
+    x86_64|amd64)
+      DNSTT_GO_ARCH=amd64
+      DNSTT_GO_SHA256=a21ae5633a269bcd7e90cf767e48225633795e99d831742cbf3397064fee7712
+      ;;
+    aarch64|arm64)
+      DNSTT_GO_ARCH=arm64
+      DNSTT_GO_SHA256=9bf234ea70ffec9347fdf6b22ce4add51717d3386a38a441e8c8743fceb5eaee
+      ;;
+    *)
+      echo "Arsitektur Go DNSTT tidak didukung: $(uname -m)" >&2
+      exit 1
+      ;;
+  esac
+  export PATH="$DNSTT_GO_ROOT/bin:$PATH"
+  if [ ! -x "$DNSTT_GO_ROOT/bin/go" ] || ! "$DNSTT_GO_ROOT/bin/go" version >/dev/null 2>&1; then
+    rm -rf "$DNSTT_GO_ROOT" /tmp/sansxml-go.tar.gz
+    mkdir -p /usr/local
+    if ! curl -fL --retry 3 --connect-timeout 15 \
+      "https://go.dev/dl/go${DNSTT_GO_VERSION}.linux-${DNSTT_GO_ARCH}.tar.gz" \
+      -o /tmp/sansxml-go.tar.gz >>/tmp/sansxml-dnstt-build.log 2>&1; then
+      echo "Gagal download Go ${DNSTT_GO_VERSION}. Lihat /tmp/sansxml-dnstt-build.log" >&2
+      exit 1
+    fi
+    if ! printf '%s  %s\n' "$DNSTT_GO_SHA256" /tmp/sansxml-go.tar.gz | sha256sum -c - >>/tmp/sansxml-dnstt-build.log 2>&1; then
+      echo "Checksum Go tidak cocok. Lihat /tmp/sansxml-dnstt-build.log" >&2
+      rm -f /tmp/sansxml-go.tar.gz
+      exit 1
+    fi
+    mkdir -p "$DNSTT_GO_ROOT"
+    if ! tar -xzf /tmp/sansxml-go.tar.gz -C "$DNSTT_GO_ROOT" --strip-components=1 >>/tmp/sansxml-dnstt-build.log 2>&1; then
+      echo "Gagal extract Go. Lihat /tmp/sansxml-dnstt-build.log" >&2
+      rm -rf "$DNSTT_GO_ROOT" /tmp/sansxml-go.tar.gz
+      exit 1
+    fi
+    rm -f /tmp/sansxml-go.tar.gz
   fi
-  if ! command -v go >/dev/null 2>&1; then
-    echo "Go compiler tidak tersedia. Lihat /tmp/sansxml-dnstt-build.log" >&2
-    exit 1
-  fi
+
   if [ ! -x "$DNSTT_BIN" ] || ! "$DNSTT_BIN" -h >/dev/null 2>&1; then
     rm -rf /tmp/dnstt-src
     if ! git clone --depth=1 https://github.com/Mygod/dnstt.git /tmp/dnstt-src >>/tmp/sansxml-dnstt-build.log 2>&1; then
@@ -284,7 +317,11 @@ EOF
       exit 1
     fi
     cd /tmp/dnstt-src/dnstt-server
-    if ! go build -trimpath -o "$DNSTT_BIN" . >>/tmp/sansxml-dnstt-build.log 2>&1; then
+    if ! "$DNSTT_GO_ROOT/bin/go" version >>/tmp/sansxml-dnstt-build.log 2>&1; then
+      echo "Go toolchain DNSTT tidak dapat dijalankan" >&2
+      exit 1
+    fi
+    if ! CGO_ENABLED=0 GOTOOLCHAIN=local "$DNSTT_GO_ROOT/bin/go" build -trimpath -o "$DNSTT_BIN" . >>/tmp/sansxml-dnstt-build.log 2>&1; then
       echo "Gagal compile DNSTT. Lihat /tmp/sansxml-dnstt-build.log" >&2
       exit 1
     fi
@@ -522,7 +559,7 @@ DNSTT_PUBKEY="$(printf '%s' "$DNSTT_PUBKEY" | sed -n 's/.*\([0-9A-Fa-f]\{64\}\).
 DNSTT_SLOW_HOST="$(awk -F= '/^SLOW_NS_HOST=/{print $2}' /etc/dnstt/config 2>/dev/null | tail -n1)"
 [ -n "$DNSTT_SLOW_HOST" ] || DNSTT_SLOW_HOST="slow.${DOMAIN}"
 if ! printf '%s' "$DNSTT_PUBKEY" | grep -Eq '^[0-9a-fA-F]{64}$'; then
-  echo -e "  ${RED}SLOWDNS ERROR${NC}: Public key DNSTT tidak valid."
+  echo -e "  ${RED}SLOWDNS ERROR${NC}: DNSTT gagal dibuat. Cek /tmp/sansxml-dnstt-build.log dan /tmp/sansxml-dnstt-keygen.log"
   exit 1
 fi
 DNSTT_SLOW_PORT="$(awk -F= '/^SLOW_PORT=/{print $2}' /etc/dnstt/config 2>/dev/null | tail -n1)"
