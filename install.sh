@@ -2,7 +2,7 @@
 export DEBIAN_FRONTEND=noninteractive
 CYAN='\033[1;36m'; GREEN='\033[1;32m'; RED='\033[1;31m'
 YELLOW='\033[1;33m'; MAGENTA='\033[1;35m'; WHITE='\033[1;37m'; BLUE='\033[1;34m'; NC='\033[0m'
-VERSION="2.1.1"
+VERSION="2.2.0"
 LOG_FILE="/var/log/sansxml.log"
 mkdir -p "$(dirname "$LOG_FILE")"
 : > "$LOG_FILE"
@@ -25,11 +25,13 @@ bar(){
 render_install(){
   clear
   printf '\n'
-  printf '%-56s %s\n' 'SANSXML VPN STORE' "v$VERSION"
-  printf '────────────────────────────────────────────────────────────\n\n'
-  printf 'Pemasang otomatis\n'
-  printf '%s  ·  %s\n\n' "${PRETTY_NAME:-Ubuntu 20.04}" "$(uname -m)"
-  printf '────────────────────────────────────────────────────────────\n\n'
+  printf "${PU2}╭────────────────────────────────────────────────────────────╮${N}\n"
+  printf "${PU2}│${N}  ${PK}✦ SANSXML VPN STORE ${N}${GY}INSTALLER${N} ${PU2}v$VERSION${N}             ${PU2}│${N}\n"
+  printf "${PU2}│${N}  ${CY}SSH${N} ${WH}•${N} ${CY}WS-SSH${N} ${WH}•${N} ${CY}XRAY${N} ${WH}•${N} ${CY}BBR/TCP${N}                 ${PU2}│${N}\n"
+  printf "${PU2}╰────────────────────────────────────────────────────────────╯${N}\n\n"
+  printf " ${GY}OS${N}      ${WH}%s${N}\n" "${PRETTY_NAME:-Ubuntu 20.04}"
+  printf " ${GY}ARCH${N}    ${WH}%s${N}\n" "$(uname -m)"
+  printf ' ${PU}────────────────────────────────────────────────────────────${N}\n\n'
   printf '%-50s %s\n' 'Memasang paket dasar' "$(get_state pkg 'menunggu')"
   printf '%-50s %s\n' 'Memasang Telegram API' "$(get_state telegram 'menunggu')"
   printf '%-50s %s\n' 'Memasang Dropbear' "$(get_state dropbear 'menunggu')"
@@ -38,6 +40,7 @@ render_install(){
   printf '%-50s %s\n' 'Membuat kunci SSH' "$(get_state key 'menunggu')"
   printf '%-50s %s\n' 'Mengaktifkan vnstat' "$(get_state vnstat 'menunggu')"
   printf '%-50s %s\n' 'Memasang WS-SSH' "$(get_state ws 'menunggu')"
+  printf '%-50s %s\n' 'Optimasi TCP / BBR / Keepalive' "$(get_state netopt 'menunggu')"
   printf '%-50s %s\n' 'Memasang stunnel SSL' "$(get_state stunnel 'menunggu')"
   printf '%-50s %s\n' 'Memasang UDPGW' "$(get_state udpgw 'menunggu')"
   printf '%-50s %s\n' 'Mengatur firewall' "$(get_state firewall 'menunggu')"
@@ -160,6 +163,7 @@ Type=simple
 ExecStart=/usr/sbin/dropbear -F -E -p 109
 Restart=always
 RestartSec=2
+LimitNOFILE=100000
 [Install]
 WantedBy=multi-user.target
 DROPBEARSVC
@@ -200,6 +204,31 @@ HAPROXYEOF
 haproxy -c -f /etc/haproxy/haproxy.cfg >/dev/null 2>&1' || exit 1
 run_step_sh key 'Membuat kunci SSH' 'mkdir -p /root/.ssh; chmod 700 /root/.ssh; [ -f /root/.ssh/id_bot ] || ssh-keygen -t ed25519 -f /root/.ssh/id_bot -N "" -q; touch /root/.ssh/authorized_keys; cat /root/.ssh/id_bot.pub >> /root/.ssh/authorized_keys; sort -u /root/.ssh/authorized_keys -o /root/.ssh/authorized_keys; chmod 600 /root/.ssh/authorized_keys' || exit 1
 run_step_sh vnstat 'Mengaktifkan vnstat' 'systemctl enable vnstat >/dev/null 2>&1; systemctl restart vnstat >/dev/null 2>&1' || exit 1
+run_step_sh netopt 'Optimasi TCP / BBR / Keepalive' 'set -e
+modprobe tcp_bbr 2>/dev/null || true
+cat > /etc/sysctl.d/99-sansxml-speed.conf << "SYSCTLEOF"
+# SANSXML TCP performance / connection stability
+net.core.default_qdisc=fq
+net.ipv4.tcp_congestion_control=bbr
+net.ipv4.tcp_fastopen=3
+net.ipv4.tcp_keepalive_time=60
+net.ipv4.tcp_keepalive_intvl=15
+net.ipv4.tcp_keepalive_probes=5
+net.core.somaxconn=65535
+net.ipv4.tcp_max_syn_backlog=65535
+net.ipv4.ip_local_port_range=1024 65535
+SYSCTLEOF
+sysctl --system >/dev/null 2>&1
+mkdir -p /etc/ssh/sshd_config.d
+cat > /etc/ssh/sshd_config.d/98-sansxml-tcp.conf << "SSHTCPEOF"
+ClientAliveInterval 60
+ClientAliveCountMax 3
+TCPKeepAlive yes
+MaxSessions 100
+MaxStartups 100:30:200
+SSHTCPEOF
+if command -v sshd >/dev/null 2>&1; then sshd -t; fi
+' || exit 1
 
 # 3. VPN SERVICES
 run_step_sh ws 'Memasang WS-SSH' 'cat > /usr/local/bin/ws-ssh.py << "WSEOF"
@@ -229,7 +258,9 @@ def read_http_headers(c,first):
 def handle(c,a):
     ssh=None
     try:
-        c.settimeout(5); first=b""
+        c.setsockopt(socket.SOL_SOCKET, socket.SO_KEEPALIVE, 1)
+    c.setsockopt(socket.IPPROTO_TCP, socket.TCP_NODELAY, 1)
+    c.settimeout(5); first=b""
         try: first=c.recv(4096)
         except Exception: pass
         if first and first.startswith((b"GET ",b"POST ",b"CONNECT ",b"HEAD ")):
@@ -453,6 +484,7 @@ ClientAliveInterval 15
 ClientAliveCountMax 2
 TCPKeepAlive yes
 SSHEOF
+if command -v sshd >/dev/null 2>&1; then sshd -t || { echo "Konfigurasi SSH tidak valid" >&2; exit 1; }; fi
 systemctl restart ssh 2>/dev/null || systemctl restart sshd
 
 # 6. BOT CONFIG
