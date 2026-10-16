@@ -1,0 +1,7 @@
+[Unit]
+Description=Remove expired SANSXML Xray accounts
+After=xray.service
+
+[Service]
+Type=oneshot
+ExecStart=/usr/local/bin/xray-account cleanup
